@@ -1,0 +1,22 @@
+#pragma once
+
+#include "game_window_manager.h"
+
+
+GameWindowManager::ProcAddrFunc dlsymGetProcAddress(const char*);
+
+
+class FBWindowManager : public GameWindowManager {
+
+public:
+    FBWindowManager();
+
+    ProcAddrFunc getProcAddrFunc() override;
+
+    std::shared_ptr<GameWindow> createWindow(const std::string& title, int width, int height, GraphicsApi api) override;
+
+// we will likely handle input through SDL2 as well
+    void addGamepadMappingFile(const std::string& path) override;
+
+    void addGamePadMapping(const std::string &content) override;
+};
