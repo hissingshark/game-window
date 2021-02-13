@@ -9,6 +9,7 @@ set(GAMEWINDOW_SOURCES_LINUX_GAMEPAD src/joystick_manager_linux_gamepad.cpp src/
 set(GAMEWINDOW_SOURCES_EGLUT src/window_eglut.h src/window_eglut.cpp src/window_manager_eglut.cpp src/window_manager_eglut.h)
 set(GAMEWINDOW_SOURCES_GLFW src/window_glfw.h src/window_glfw.cpp src/window_manager_glfw.cpp src/window_manager_glfw.h src/joystick_manager_glfw.cpp src/joystick_manager_glfw.h)
 set(GAMEWINDOW_SOURCES_FB src/window_fb.h src/window_fb.cpp src/window_manager_fb.cpp src/window_manager_fb.h)
+set(GAMEWINDOW_SOURCES_SDL2 src/window_sdl2.h src/window_sdl2.cpp src/window_manager_sdl2.cpp src/window_manager_sdl2.h)
 
 add_library(gamewindow ${GAMEWINDOW_SOURCES})
 target_include_directories(gamewindow PUBLIC include/)
@@ -23,4 +24,24 @@ elseif (GAMEWINDOW_SYSTEM STREQUAL "FB")
     target_sources(gamewindow PRIVATE ${GAMEWINDOW_SOURCES_FB}  ${GAMEWINDOW_SOURCES_LINUX_GAMEPAD})
     target_link_libraries(gamewindow PUBLIC eglut linux-gamepad)
     add_definitions(-DEGLUT_USE_FB)
+elseif (GAMEWINDOW_SYSTEM STREQUAL "SDL2")
+    find_package(EGL REQUIRED)
+    message(STATUS "Found EGL")
+    find_package(SDL2 REQUIRED)
+    message(STATUS "Found SDL2: -I" ${SDL2_INCLUDE_DIRS} " " ${SDL2_LIBRARIES})
+    target_sources(gamewindow PRIVATE ${GAMEWINDOW_SOURCES_SDL2})
+    target_link_libraries(gamewindow)
+
+# shouldn't need any macros as it's all original units now    add_definitions(-DEGLUT_USE_SDL2)
 endif()
+
+#[[ these need to be incorporated so it links sdl2 and egl - how do we append?
+add_library(eglut ${EGLUT_SOURCES})
+target_include_directories(eglut PUBLIC include/)
+target_include_directories(eglut PRIVATE ${EGL_INCLUDE_DIRS})
+target_link_libraries(eglut PUBLIC ${PNG_LIBRARIES} ${EGL_LIBRARIES})
+
+if (EGLUT_USE_FB)
+    target_link_libraries(eglut PUBLIC ${SDL2_LIBRARIES})
+    target_include_directories(eglut PRIVATE ${SDL2_INCLUDE_DIRS})
+]]
