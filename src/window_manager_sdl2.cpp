@@ -52,19 +52,18 @@ GameWindowManager::ProcAddrFunc SDL2WindowManager::getProcAddrFunc() {
 
 std::shared_ptr<GameWindow> SDL2WindowManager::createWindow(const std::string& title, int width, int height,
                                                              GraphicsApi api) {
-    return std::shared_ptr<GameWindow>(new SDL2Window(title, width, height, api));
+    return std::shared_ptr<GameWindow>(new SDL2GameWindow(title, width, height, api));
 }
 
 // we expect to handle inputs via SDL2
-/*
 void SDL2WindowManager::addGamepadMappingFile(const std::string &path) {
-    LinuxGamepadJoystickManager::instance.loadMappingsFromFile(path);
+//    LinuxGamepadJoystickManager::instance.loadMappingsFromFile(path);
 }
 
 void SDL2WindowManager::addGamePadMapping(const std::string &content) {
-    LinuxGamepadJoystickManager::instance.loadMappings(content);
+//    LinuxGamepadJoystickManager::instance.loadMappings(content);
 }
-*/
+
 // Define this window manager as the used one
 std::shared_ptr<GameWindowManager> GameWindowManager::createManager() {
     return std::shared_ptr<GameWindowManager>(new SDL2WindowManager());

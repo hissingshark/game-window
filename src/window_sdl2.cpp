@@ -18,15 +18,15 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
         GameWindow(title, width, height, api), windowedWidth(width), windowedHeight(height) {
 
     // TODO should SDL find the native resolution to set?
-    if (SDL_Init(SDL_INIT_VIDEO) != 0 {); // TODO could init other subsystems now
+    if (SDL_Init(SDL_INIT_VIDEO) != 0) { // TODO could init other subsystems now
         SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
-        return 1; // TODO is this how we handle errors?
+//        return 1; // TODO is this how we handle errors? We cannot return from here
     }
 
-    window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
+    window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
     if (window == NULL) {
         printf("Could not create SDL window: %s\n", SDL_GetError());
-        return 1;
+//        return 1;
     }
 // TODO context and surface creation - do these need to be shared externally?  I don't think so as the context is globally set
     glcontext = SDL_GL_CreateContext(window);
@@ -77,8 +77,10 @@ void SDL2GameWindow::getWindowSize(int& width, int& height) const {
 }
 
 void SDL2GameWindow::show() {
+/* TODO is it not always shown? Might be a NOOP
     SDL2JoystickManager::addWindow(this);
     sdl2ShowWindow(window);
+*/
 }
 
 void SDL2GameWindow::close() {
@@ -156,83 +158,82 @@ void SDL2GameWindow::_sdl2ScrollCallback(SDL2window* window, double x, double y)
 */
 // TODO one universally required function, but codes will need to be checked for SDL2 compatability
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
-    if (keyCode >= SDL2_KEY_F1 && keyCode <= SDL2_KEY_F12)
-        return (KeyCode) (keyCode - SDL2_KEY_F1 + (int) KeyCode::FN1);
+    if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
+        return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
-        case SDL2_KEY_BACKSPACE:
+        case SDLK_BACKSPACE:
             return KeyCode::BACKSPACE;
-        case SDL2_KEY_TAB:
+        case SDLK_TAB:
             return KeyCode::TAB;
-        case SDL2_KEY_ENTER:
+        case SDLK_RETURN:
             return KeyCode::ENTER;
-        case SDL2_KEY_LEFT_SHIFT:
+        case SDLK_LSHIFT:
             return KeyCode::LEFT_SHIFT;
-        case SDL2_KEY_RIGHT_SHIFT:
+        case SDLK_RSHIFT:
             return KeyCode::RIGHT_SHIFT;
-        case SDL2_KEY_LEFT_CONTROL:
+        case SDLK_LCTRL:
             return KeyCode::LEFT_CTRL;
-        case SDL2_KEY_RIGHT_CONTROL:
+        case SDLK_RCTRL:
             return KeyCode::RIGHT_CTRL;
-        case SDL2_KEY_PAUSE:
+        case SDLK_PAUSE:
             return KeyCode::PAUSE;
-        case SDL2_KEY_CAPS_LOCK:
+        case SDLK_CAPSLOCK:
             return KeyCode::CAPS_LOCK;
-        case SDL2_KEY_ESCAPE:
+        case SDLK_ESCAPE:
             return KeyCode::ESCAPE;
-        case SDL2_KEY_PAGE_UP:
+        case SDLK_PAGEUP:
             return KeyCode::PAGE_UP;
-        case SDL2_KEY_PAGE_DOWN:
+        case SDLK_PAGEDOWN:
             return KeyCode::PAGE_DOWN;
-        case SDL2_KEY_END:
+        case SDLK_END:
             return KeyCode::END;
-        case SDL2_KEY_HOME:
+        case SDLK_HOME:
             return KeyCode::HOME;
-        case SDL2_KEY_LEFT:
+        case SDLK_LEFT:
             return KeyCode::LEFT;
-        case SDL2_KEY_UP:
+        case SDLK_UP:
             return KeyCode::UP;
-        case SDL2_KEY_RIGHT:
+        case SDLK_RIGHT:
             return KeyCode::RIGHT;
-        case SDL2_KEY_DOWN:
+        case SDLK_DOWN:
             return KeyCode::DOWN;
-        case SDL2_KEY_INSERT:
+        case SDLK_INSERT:
             return KeyCode::INSERT;
-        case SDL2_KEY_DELETE:
+        case SDLK_DELETE:
             return KeyCode::DELETE;
-        case SDL2_KEY_NUM_LOCK:
+        case SDLK_NUMLOCKCLEAR:
             return KeyCode::NUM_LOCK;
-        case SDL2_KEY_SCROLL_LOCK:
+        case SDLK_SCROLLLOCK:
             return KeyCode::SCROLL_LOCK;
-        case SDL2_KEY_SEMICOLON:
+        case SDLK_SEMICOLON:
             return KeyCode::SEMICOLON;
-        case SDL2_KEY_EQUAL:
+        case SDLK_EQUALS:
             return KeyCode::EQUAL;
-        case SDL2_KEY_COMMA:
+        case SDLK_COMMA:
             return KeyCode::COMMA;
-        case SDL2_KEY_MINUS:
+        case SDLK_MINUS:
             return KeyCode::MINUS;
-        case SDL2_KEY_PERIOD:
+        case SDLK_PERIOD:
             return KeyCode::PERIOD;
-        case SDL2_KEY_SLASH:
+        case SDLK_SLASH:
             return KeyCode::SLASH;
-        case SDL2_KEY_GRAVE_ACCENT:
+        case SDLK_BACKQUOTE:
             return KeyCode::GRAVE;
-        case SDL2_KEY_LEFT_BRACKET:
+        case SDLK_LEFTBRACKET:
             return KeyCode::LEFT_BRACKET;
-        case SDL2_KEY_BACKSLASH:
+        case SDLK_BACKSLASH:
             return KeyCode::BACKSLASH;
-        case SDL2_KEY_RIGHT_BRACKET:
+        case SDLK_RIGHTBRACKET:
             return KeyCode::RIGHT_BRACKET;
-        case SDL2_KEY_APOSTROPHE:
+        case SDLK_QUOTE:
             return KeyCode::APOSTROPHE;
-
-        case SDL2_KEY_LEFT_SUPER:
+        case SDLK_APPLICATION:
             return KeyCode::LEFT_SUPER;
-        case SDL2_KEY_RIGHT_SUPER:
-            return KeyCode::RIGHT_SUPER;
-        case SDL2_KEY_LEFT_ALT:
+//        case SDLK_RIGHT_SUPER:
+//            return KeyCode::RIGHT_SUPER;
+        case SDLK_LALT:
             return KeyCode::LEFT_ALT;
-        case SDL2_KEY_RIGHT_ALT:
+        case SDLK_RALT:
             return KeyCode::RIGHT_ALT;
     }
     if (keyCode < 256)

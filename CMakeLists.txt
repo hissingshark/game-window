@@ -4,6 +4,8 @@ project(eglut LANGUAGES CXX)
 
 include(BuildSettings.cmake)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/")
+
 set(GAMEWINDOW_SOURCES include/game_window.h include/game_window_manager.h src/game_window_manager.cpp src/game_window_error_handler.cpp src/joystick_manager.cpp)
 set(GAMEWINDOW_SOURCES_LINUX_GAMEPAD src/joystick_manager_linux_gamepad.cpp src/joystick_manager_linux_gamepad.h src/window_with_linux_gamepad.cpp src/window_with_linux_gamepad.h)
 set(GAMEWINDOW_SOURCES_EGLUT src/window_eglut.h src/window_eglut.cpp src/window_manager_eglut.cpp src/window_manager_eglut.h)
@@ -30,9 +32,7 @@ elseif (GAMEWINDOW_SYSTEM STREQUAL "SDL2")
     find_package(SDL2 REQUIRED)
     message(STATUS "Found SDL2: -I" ${SDL2_INCLUDE_DIRS} " " ${SDL2_LIBRARIES})
     target_sources(gamewindow PRIVATE ${GAMEWINDOW_SOURCES_SDL2})
-    target_link_libraries(gamewindow)
-
-# shouldn't need any macros as it's all original units now    add_definitions(-DEGLUT_USE_SDL2)
+    target_link_libraries(gamewindow ${SDL2_LIBRARIES} ${EGL_LIBRARIES})
 endif()
 
 #[[ these need to be incorporated so it links sdl2 and egl - how do we append?

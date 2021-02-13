@@ -16,7 +16,7 @@ public:
     std::shared_ptr<GameWindow> createWindow(const std::string& title, int width, int height, GraphicsApi api) override;
 
 // we will likely handle input through SDL2 as well
-//    void addGamepadMappingFile(const std::string& path) override;
+    void addGamepadMappingFile(const std::string& path) override;
 
-//    void addGamePadMapping(const std::string &content) override;
+    void addGamePadMapping(const std::string &content) override;
 };

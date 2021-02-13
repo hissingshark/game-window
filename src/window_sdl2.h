@@ -1,17 +1,17 @@
 #pragma once
 
 #include <game_window.h>
-#include <SDL2/SDL.h.h>
+#include <SDL2/SDL.h>
 
 class SDL2GameWindow : public GameWindow {
 
 private:
     SDL_Window *window = NULL;
     SDL_GLContext glcontext = NULL;
+    int windowedWidth = -1, windowedHeight = -1;
 /* how many actually needed?
     double lastMouseX = 0.0, lastMouseY = 0.0;
     int windowedX = -1, windowedY = -1;
-    int windowedWidth = -1, windowedHeight = -1;
     int relativeScale;
     bool focused = true;
     bool warnedButtons = false;
