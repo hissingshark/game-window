@@ -6,6 +6,7 @@
 class SDL2GameWindow : public GameWindow {
 
 private:
+    static SDL2GameWindow *currentGameWindow;
     SDL_Window *window = NULL;
     SDL_GLContext glcontext = NULL;
     int windowedWidth = -1, windowedHeight = -1;
@@ -18,6 +19,7 @@ private:
 */
 //    friend class SDL2JoystickManager;
 
+    static void handleKeyboardEvent(SDL_KeyboardEvent *event);
     static KeyCode getKeyMinecraft(int keyCode);
 /*
     static void _sdl2WindowSizeCallback(SDL2window* window, int w, int h);

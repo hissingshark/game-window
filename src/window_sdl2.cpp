@@ -1,5 +1,6 @@
 #include "window_sdl2.h"
 #include "game_window_manager.h"
+//#include "game_window.h"
 
 #include <SDL2/SDL.h>
 //#include "joystick_manager_sdl2.h"
@@ -14,11 +15,15 @@
 //#include <cstring>
 //#include <sstream>
 
+SDL2GameWindow* SDL2GameWindow::currentGameWindow;
+
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api), windowedWidth(width), windowedHeight(height) {
 
+    currentGameWindow = this;
+
     // TODO should SDL find the native resolution to set?
-    if (SDL_Init(SDL_INIT_VIDEO) != 0) { // TODO could init other subsystems now
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) { // TODO could init other subsystems now
         SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
 //        return 1; // TODO is this how we handle errors? We cannot return from here
     }
@@ -62,10 +67,9 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
-/*
-    SDL2JoystickManager::removeWindow(this);
-    sdl2DestroyWindow(window);
-*/
+    SDL_GL_DeleteContext(glcontext);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 }
 
 void SDL2GameWindow::setIcon(std::string const& iconPath) {
@@ -77,19 +81,55 @@ void SDL2GameWindow::getWindowSize(int& width, int& height) const {
 }
 
 void SDL2GameWindow::show() {
-/* TODO is it not always shown? Might be a NOOP
-    SDL2JoystickManager::addWindow(this);
-    sdl2ShowWindow(window);
-*/
+    // NOOP - borderless window
 }
 
 void SDL2GameWindow::close() {
-    SDL_GL_DeleteContext(glcontext);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    // NOOP - borderless window
 }
 
 void SDL2GameWindow::pollEvents() {
+    SDL_Event event;
+
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_KEYDOWN:
+            case SDL_KEYUP:
+                handleKeyboardEvent(&event.key);
+printf("Done.\n");
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
+printf("DEBUG: ");
+
+    KeyCode key = getKeyMinecraft(keyevent->keysym.sym);
+
+    KeyAction action;
+    if (keyevent->repeat) {
+printf("Held...");
+        action = KeyAction::REPEAT;
+    }
+    else {
+        switch (keyevent->state) {
+            case SDL_PRESSED:
+printf("Pressed.");
+                action = KeyAction::PRESS;
+                break;
+            case SDL_RELEASED:
+printf("Released.");
+                action = KeyAction::RELEASE;
+                break;
+            default:
+              return;
+        }
+    }
+
+    currentGameWindow->onKeyboard(key, action);
 }
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
@@ -180,6 +220,7 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDLK_CAPSLOCK:
             return KeyCode::CAPS_LOCK;
         case SDLK_ESCAPE:
+printf("Esc ");
             return KeyCode::ESCAPE;
         case SDLK_PAGEUP:
             return KeyCode::PAGE_UP;
@@ -229,8 +270,6 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
             return KeyCode::APOSTROPHE;
         case SDLK_APPLICATION:
             return KeyCode::LEFT_SUPER;
-//        case SDLK_RIGHT_SUPER:
-//            return KeyCode::RIGHT_SUPER;
         case SDLK_LALT:
             return KeyCode::LEFT_ALT;
         case SDLK_RALT:
