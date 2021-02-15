@@ -3,13 +3,13 @@
 
 #include <SDL2/SDL.h>
 
-
-SDL2GameWindow* SDL2GameWindow::currentGameWindow;
-
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
 
     currentGameWindow = this;
+    pointerHidden = true;
+    window = NULL;
+    glcontext = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
         SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
@@ -21,7 +21,13 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
         printf("Could not create SDL window: %s\n", SDL_GetError());
 //        return 1;
     }
+
     glcontext = SDL_GL_CreateContext(window);
+    if (glcontext == NULL) {
+        printf("Could not create SDL glContext: %s\n", SDL_GetError());
+//        return 1;
+    }
+
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
@@ -86,7 +92,7 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 }
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
-    // TODO
+    pointerHidden = disabled;
 }
 
 void SDL2GameWindow::setFullscreen(bool fullscreen) {

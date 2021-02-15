@@ -6,13 +6,13 @@
 class SDL2GameWindow : public GameWindow {
 
 private:
-    static SDL2GameWindow *currentGameWindow;
-    bool focused = true;
-    SDL_Window *window = NULL;
-    SDL_GLContext glcontext = NULL;
+    SDL2GameWindow *currentGameWindow;
+    bool pointerHidden;
+    SDL_Window *window;
+    SDL_GLContext glcontext;
 
-    static void handleKeyboardEvent(SDL_KeyboardEvent *event);
-    static KeyCode getKeyMinecraft(int keyCode);
+    void handleKeyboardEvent(SDL_KeyboardEvent *event);
+    KeyCode getKeyMinecraft(int keyCode);
 
 public:
 
