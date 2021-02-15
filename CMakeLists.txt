@@ -31,11 +31,12 @@ elseif (GAMEWINDOW_SYSTEM STREQUAL "SDL2")
     message(STATUS "Found EGL")
     find_package(SDL2 REQUIRED)
     message(STATUS "Found SDL2: -I" ${SDL2_INCLUDE_DIRS} " " ${SDL2_LIBRARIES})
+    find_package(SDL2_image REQUIRED)
     target_sources(gamewindow PRIVATE ${GAMEWINDOW_SOURCES_SDL2})
-    target_link_libraries(gamewindow ${SDL2_LIBRARIES} ${EGL_LIBRARIES})
+    target_link_libraries(gamewindow ${EGL_LIBRARIES} ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
 endif()
 
-#[[ these need to be incorporated so it links sdl2 and egl - how do we append?
+#[[ TODO these need to be incorporated so it links sdl2 and egl - how do we append?
 add_library(eglut ${EGLUT_SOURCES})
 target_include_directories(eglut PUBLIC include/)
 target_include_directories(eglut PRIVATE ${EGL_INCLUDE_DIRS})
