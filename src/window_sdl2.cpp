@@ -1,26 +1,11 @@
 #include "window_sdl2.h"
 #include "game_window_manager.h"
-//#include "game_window.h"
 
 #include <SDL2/SDL.h>
-//#include "joystick_manager_sdl2.h"
 
-// from glfw
-//#include <codecvt>
-//#include <iomanip>
-//#include <thread>
-//#include <math.h>
-
-// from EGLUT
-//#include <cstring>
-//#include <sstream>
 
 SDL2GameWindow* SDL2GameWindow::currentGameWindow;
 
-/*
-SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
-        GameWindow(title, width, height, api), windowedWidth(width), windowedHeight(height) {
-*/
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
 

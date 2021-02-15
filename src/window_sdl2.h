@@ -10,7 +10,6 @@ private:
     bool focused = true;
     SDL_Window *window = NULL;
     SDL_GLContext glcontext = NULL;
-//    int windowedWidth = -1, windowedHeight = -1;
 
     static void handleKeyboardEvent(SDL_KeyboardEvent *event);
     static KeyCode getKeyMinecraft(int keyCode);
