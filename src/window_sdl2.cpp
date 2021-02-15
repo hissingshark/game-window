@@ -17,8 +17,12 @@
 
 SDL2GameWindow* SDL2GameWindow::currentGameWindow;
 
+/*
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api), windowedWidth(width), windowedHeight(height) {
+*/
+SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
+        GameWindow(title, width, height, api) {
 
     currentGameWindow = this;
 
@@ -118,7 +122,6 @@ void SDL2GameWindow::setSwapInterval(int interval) {
 }
 
 // TODO fix QWERTY and numpad mapping.  ? use scancode instead of keysym?
-one universally required function, but codes will need to be checked for SDL2 compatability
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
     if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
         return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
