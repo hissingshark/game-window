@@ -1,3 +1,0 @@
-/home/osmc/mcpelauncher-manifest/game-window/build/CMakeFiles/rebuild_cache.dir
-/home/osmc/mcpelauncher-manifest/game-window/build/CMakeFiles/gamewindow.dir
-/home/osmc/mcpelauncher-manifest/game-window/build/CMakeFiles/edit_cache.dir
