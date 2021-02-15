@@ -7,9 +7,11 @@ class SDL2GameWindow : public GameWindow {
 
 private:
     SDL2GameWindow *currentGameWindow;
-    bool pointerHidden;
     SDL_Window *window;
     SDL_GLContext glcontext;
+    SDL_Renderer *renderer;
+    SDL_Texture *mousePointer;
+    bool pointerHidden;
 
     void handleKeyboardEvent(SDL_KeyboardEvent *event);
     KeyCode getKeyMinecraft(int keyCode);

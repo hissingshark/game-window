@@ -2,6 +2,7 @@
 #include "game_window_manager.h"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
@@ -10,10 +11,17 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
     pointerHidden = true;
     window = NULL;
     glcontext = NULL;
+    renderer = NULL;
+    mousePointer = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
-        SDL_Log("Unable to initialize SDL: %s", SDL_GetError());
+        SDL_Log("Unable to initialize SDL for video and events: %s", SDL_GetError());
 //        return 1; // TODO is this how we handle errors? We cannot return from here
+    }
+
+    if ((IMG_Init(IMG_INIT_PNG)&IMG_INIT_PNG) != IMG_INIT_PNG) {
+        SDL_Log("Unable to initialize SDL_image for png loading: %s", SDL_GetError());
+//        return 1;
     }
 
     window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
@@ -28,6 +36,17 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 //        return 1;
     }
 
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (renderer == NULL) {
+        printf("Could not create SDL renderer: %s\n", SDL_GetError());
+//        return 1;
+    }
+
+    mousePointer = IMG_LoadTexture(renderer, "./gfx/mousepointer.png");
+    if (mousePointer == NULL) {
+        printf("Could not load png for mouse pointer: %s\n", SDL_GetError());
+//        return 1;
+    }
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
@@ -69,7 +88,7 @@ printf("Done.\n");
 }
 
 void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
-    KeyCode key = getKeyMinecraft(keyevent->keysym.sym);
+    KeyCode key = getKeyMinecraft(keyevent->keysym.scancode);
 
     KeyAction action;
     if (keyevent->repeat) {
@@ -92,6 +111,11 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 }
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
+    printf("Pointer: ");
+    if (disabled)
+        printf("DISABLED\n");
+    else
+        printf("ENABLED\n");
     pointerHidden = disabled;
 }
 
@@ -100,11 +124,17 @@ void SDL2GameWindow::setFullscreen(bool fullscreen) {
 }
 
 void SDL2GameWindow::setClipboardText(std::string const &text) {
-    // TODO ?
+    // NOOP - nowhere to cut/paste to/from without a desktop and other applications
 }
 
 void SDL2GameWindow::swapBuffers() {
     // TODO is this the best time to composite in our mouse pointer when cursor enabled in menus?
+    SDL_Rect dest;
+    dest.x = 500;
+    dest.y = 500;
+    SDL_QueryTexture(mousePointer, NULL, NULL, &dest.w, &dest.h);
+    SDL_RenderCopy(renderer, mousePointer, NULL, &dest);
+
     SDL_GL_SwapWindow(window);
 }
 
@@ -114,80 +144,80 @@ void SDL2GameWindow::setSwapInterval(int interval) {
 
 // TODO fix QWERTY and numpad mapping.  ? use scancode instead of keysym?
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
-    if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
-        return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
+    if (keyCode >= SDL_SCANCODE_F1 && keyCode <= SDL_SCANCODE_F12)
+        return (KeyCode) (keyCode - SDL_SCANCODE_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
-        case SDLK_BACKSPACE:
+        case SDL_SCANCODE_BACKSPACE:
             return KeyCode::BACKSPACE;
-        case SDLK_TAB:
+        case SDL_SCANCODE_TAB:
             return KeyCode::TAB;
-        case SDLK_RETURN:
+        case SDL_SCANCODE_RETURN:
             return KeyCode::ENTER;
-        case SDLK_LSHIFT:
+        case SDL_SCANCODE_LSHIFT:
             return KeyCode::LEFT_SHIFT;
-        case SDLK_RSHIFT:
+        case SDL_SCANCODE_RSHIFT:
             return KeyCode::RIGHT_SHIFT;
-        case SDLK_LCTRL:
+        case SDL_SCANCODE_LCTRL:
             return KeyCode::LEFT_CTRL;
-        case SDLK_RCTRL:
+        case SDL_SCANCODE_RCTRL:
             return KeyCode::RIGHT_CTRL;
-        case SDLK_PAUSE:
+        case SDL_SCANCODE_PAUSE:
             return KeyCode::PAUSE;
-        case SDLK_CAPSLOCK:
+        case SDL_SCANCODE_CAPSLOCK:
             return KeyCode::CAPS_LOCK;
-        case SDLK_ESCAPE:
+        case SDL_SCANCODE_ESCAPE:
             return KeyCode::ESCAPE;
-        case SDLK_PAGEUP:
+        case SDL_SCANCODE_PAGEUP:
             return KeyCode::PAGE_UP;
-        case SDLK_PAGEDOWN:
+        case SDL_SCANCODE_PAGEDOWN:
             return KeyCode::PAGE_DOWN;
-        case SDLK_END:
+        case SDL_SCANCODE_END:
             return KeyCode::END;
-        case SDLK_HOME:
+        case SDL_SCANCODE_HOME:
             return KeyCode::HOME;
-        case SDLK_LEFT:
+        case SDL_SCANCODE_LEFT:
             return KeyCode::LEFT;
-        case SDLK_UP:
+        case SDL_SCANCODE_UP:
             return KeyCode::UP;
-        case SDLK_RIGHT:
+        case SDL_SCANCODE_RIGHT:
             return KeyCode::RIGHT;
-        case SDLK_DOWN:
+        case SDL_SCANCODE_DOWN:
             return KeyCode::DOWN;
-        case SDLK_INSERT:
+        case SDL_SCANCODE_INSERT:
             return KeyCode::INSERT;
-        case SDLK_DELETE:
+        case SDL_SCANCODE_DELETE:
             return KeyCode::DELETE;
-        case SDLK_NUMLOCKCLEAR:
+        case SDL_SCANCODE_NUMLOCKCLEAR:
             return KeyCode::NUM_LOCK;
-        case SDLK_SCROLLLOCK:
+        case SDL_SCANCODE_SCROLLLOCK:
             return KeyCode::SCROLL_LOCK;
-        case SDLK_SEMICOLON:
+        case SDL_SCANCODE_SEMICOLON:
             return KeyCode::SEMICOLON;
-        case SDLK_EQUALS:
+        case SDL_SCANCODE_EQUALS:
             return KeyCode::EQUAL;
-        case SDLK_COMMA:
+        case SDL_SCANCODE_COMMA:
             return KeyCode::COMMA;
-        case SDLK_MINUS:
+        case SDL_SCANCODE_MINUS:
             return KeyCode::MINUS;
-        case SDLK_PERIOD:
+        case SDL_SCANCODE_PERIOD:
             return KeyCode::PERIOD;
-        case SDLK_SLASH:
+        case SDL_SCANCODE_SLASH:
             return KeyCode::SLASH;
-        case SDLK_BACKQUOTE:
+        case SDL_SCANCODE_GRAVE:
             return KeyCode::GRAVE;
-        case SDLK_LEFTBRACKET:
+        case SDL_SCANCODE_LEFTBRACKET:
             return KeyCode::LEFT_BRACKET;
-        case SDLK_BACKSLASH:
+        case SDL_SCANCODE_BACKSLASH:
             return KeyCode::BACKSLASH;
-        case SDLK_RIGHTBRACKET:
+        case SDL_SCANCODE_RIGHTBRACKET:
             return KeyCode::RIGHT_BRACKET;
-        case SDLK_QUOTE:
+        case SDL_SCANCODE_APOSTROPHE:
             return KeyCode::APOSTROPHE;
-        case SDLK_APPLICATION:
+        case SDL_SCANCODE_APPLICATION:
             return KeyCode::LEFT_SUPER;
-        case SDLK_LALT:
+        case SDL_SCANCODE_LALT:
             return KeyCode::LEFT_ALT;
-        case SDLK_RALT:
+        case SDL_SCANCODE_RALT:
             return KeyCode::RIGHT_ALT;
     }
     if (keyCode < 256)
