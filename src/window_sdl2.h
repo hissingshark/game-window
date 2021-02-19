@@ -9,7 +9,6 @@ private:
     SDL2GameWindow *currentGameWindow;
     SDL_Window *window;
     SDL_GLContext glcontext;
-    SDL_Renderer *renderer;
     SDL_Texture *mousePointer;
     bool pointerHidden;
 

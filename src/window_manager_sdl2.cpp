@@ -15,7 +15,6 @@ GameWindowManager::ProcAddrFunc dlsymGetProcAddress(const char* sym) {
 //TODO must test SDL_GL_GetProcAddress as a possible replacement
     if (!sym)
         return NULL;
-
     void *eglFunc;
 
     // try official EGL method first
