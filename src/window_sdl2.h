@@ -9,7 +9,7 @@ private:
     SDL2GameWindow *currentGameWindow;
     SDL_Window *window;
     SDL_GLContext glcontext;
-    SDL_Texture *mousePointer;
+    SDL_Surface *mousePointer, *fb0;;
     bool pointerHidden;
 
     void handleKeyboardEvent(SDL_KeyboardEvent *event);

@@ -40,8 +40,8 @@ SDL2WindowManager::SDL2WindowManager() {
     /*
     nothing instantiated yet
     just a handle to:
-      access the GL libraries via dlsymGetProcAddress()
-      the future window
+      1. access the GL libraries via dlsymGetProcAddress()
+      2. the future window
     */
 }
 

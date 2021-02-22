@@ -7,6 +7,15 @@
 #define GL_GLEXT_PROTOTYPES 1
 #include <SDL2/SDL_opengles2.h>
 
+#include <linux/fb.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include <unistd.h>
 
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
@@ -16,6 +25,7 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
     window = NULL;
     glcontext = NULL;
     mousePointer = NULL;
+    fb0 = NULL;
 
     if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
         SDL_Log("Unable to initialize SDL for video and events: %s", SDL_GetError());
@@ -31,7 +41,9 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+//    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 1);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
     window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
     if (window == NULL) {
@@ -39,9 +51,18 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 //        return 1;
     }
 
+    fb0 = SDL_GetWindowSurface(window);
+    if (fb0 == NULL) {
+        printf("DEBUG: Could not create SDL window surface (framebuffer): %s\n", SDL_GetError());
+//        return 1;
+    }
+
+    // let's just show some classic code for reference
+    mousePointer = SDL_LoadBMP("pointer.bmp"); // loads image
+
     glcontext = SDL_GL_CreateContext(window);
     if (glcontext == NULL) {
-        printf("Could not create SDL glContext: %s\n", SDL_GetError());
+        printf("DEBUG: Could not create SDL glContext: %s\n", SDL_GetError());
 //        return 1;
     }
 /*
@@ -54,6 +75,7 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
+    SDL_FreeSurface(mousePointer);
     SDL_GL_DeleteContext(glcontext);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -119,9 +141,9 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
     printf("Pointer: ");
     if (disabled)
-        printf("DISABLED\n");
+        printf("DEBUG: Pointer DISABLED\n");
     else
-        printf("ENABLED\n");
+        printf("DEBUG: Pointer ENABLED\n");
     pointerHidden = disabled;
 }
 
@@ -137,79 +159,63 @@ void SDL2GameWindow::swapBuffers() {
 // code to convert mousecoordinates to frustrum for vertex placement
 //targetPosition.x = targetLeftMost + (sourcePosition.x / sourceWidth) * targetWidth
 
-    // Shader sources
-    const GLchar* vertexSource =
-        "attribute vec4 position;    \n"
-        "void main()                  \n"
-        "{                            \n"
-        "   gl_Position = vec4(position.xyz, 1.0);  \n"
-        "}                            \n";
-    const GLchar* fragmentSource =
-        "precision mediump float;\n"
-        "void main()                                  \n"
-        "{                                            \n"
-        "  gl_FragColor = vec4 (1.0, 0.0, 1.0, 1.0 );\n"
-        "}                                            \n";
+glFinish();
 
-    // Create Vertex Array Object
-    GLint vao_old = 0;
-    glGetIntegerv(GL_VERTEX_ARRAY_BINDING_OES, &vao_old);
+    int fbfd = open("/dev/fb0", O_RDWR);
+    if (fbfd < 0) {
+      printf("Failed to open fb0\n");
+      return;
+    }
 
-    GLuint vao_new = 0;
-    glGenVertexArraysOES(1, &vao_new);
-    glBindVertexArrayOES(vao_new);
+    struct fb_var_screeninfo vinfo;
 
-    // Create a Vertex Buffer Object and copy the vertex data to it
-    GLint vbo_old;
-    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &vbo_old);
+    ioctl (fbfd, FBIOGET_VSCREENINFO, &vinfo);
 
-    GLuint vbo_new;
-    glGenBuffers(1, &vbo_new);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_new);
+    int fb_width = vinfo.xres;
+    int fb_height = vinfo.yres;
+    int fb_bpp = vinfo.bits_per_pixel;
+    int fb_bytes = fb_bpp / 8;
 
-    // define triangle screen view frustrum coords
-    GLfloat vertices[] = {0.5f, 0.25f, 0.25f, 0.5f, 0.5f, 0.75f, 0.75f, 0.5f};
+    int fb_data_size = fb_width * fb_height * fb_bytes *2;
+    int page_offset = (fb_height * fb_width * 4);
 
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    char *fbdata = (char*)mmap (0, fb_data_size,
+            PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, (off_t)0);
 
-    // Create and compile the vertex shader
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexSource, NULL);
-    glCompileShader(vertexShader);
+    for(int x=0; x<32; x++) {
+      for(int y=0; y<32; y++) {
+        int offset = (y * fb_width + x) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255; // May not be neeeded
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255; // May not be neeeded
+      }
+    }
 
-    // Create and compile the fragment shader
-    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
-    glCompileShader(fragmentShader);
-
-    // Link the vertex and fragment shader into a shader program
-    GLint shaderProgram_old;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &shaderProgram_old);
-
-    GLuint shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glUseProgram(shaderProgram);
-
-    // Specify the layout of the vertex data
-    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
-//    GLint posAttrib_old;
-//    glGetVertexAttribiv();
-    glEnableVertexAttribArray(posAttrib);
-    glVertexAttribPointer(posAttrib, 2, GL_FLOAT, GL_FALSE, 0, 0);
-
-    // Draw a triangle from the 3 vertices
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-glFlush();
-
-    // perform the requested buffer swap
     SDL_GL_SwapWindow(window);
 
-    // restore previous GL state as much as possible before returning control to Minecraft
-    glBindVertexArrayOES((GLuint)vao_old);
-    glBindBuffer(GL_ARRAY_BUFFER, (GLuint)vbo_old);
-    glUseProgram((GLuint)shaderProgram_old);
+    for(int x=0; x<32; x++) {
+      for(int y=0; y<32; y++) {
+        int offset = (y * fb_width + x) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255; // May not be neeeded
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255; // May not be neeeded
+      }
+    }
+
+    munmap (fbdata, fb_data_size);
+    ::close(fbfd);
 }
 
 void SDL2GameWindow::setSwapInterval(int interval) {
