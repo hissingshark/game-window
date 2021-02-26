@@ -21,7 +21,7 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
         GameWindow(title, width, height, api) {
 
     currentGameWindow = this;
-    pointerHidden = true;
+    pointerHidden = false;
     window = NULL;
     glcontext = NULL;
     mousePointer = NULL;
@@ -102,6 +102,11 @@ void SDL2GameWindow::pollEvents() {
 
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
+            case SDL_MOUSEMOTION:
+                handleMouseMotionEvent(&event.motion);
+            case SDL_MOUSEBUTTONDOWN:
+            case SDL_MOUSEBUTTONUP:
+                handleMouseClickEvent(&event.button);
             case SDL_KEYDOWN:
             case SDL_KEYUP:
                 handleKeyboardEvent(&event.key);
@@ -113,6 +118,18 @@ void SDL2GameWindow::pollEvents() {
                 break;
         }
     }
+}
+
+void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
+    if (pointerHidden) {
+        currentGameWindow->onMouseRelativePosition(motionevent->xrel, motionevent->yrel);
+    }
+    else {
+        currentGameWindow->onMousePosition(motionevent->x, motionevent->y);
+    }
+}
+
+void SDL2GameWindow::handleMouseClickEvent(SDL_MouseButtonEvent *clickevent) {
 }
 
 void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
@@ -139,11 +156,17 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 }
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
-    printf("Pointer: ");
     if (disabled)
-        printf("DEBUG: Pointer DISABLED\n");
-    else
-        printf("DEBUG: Pointer ENABLED\n");
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+    else {
+        // these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+
+        int w, h;
+        SDL_GetWindowSize(window, &w, &h);
+        SDL_WarpMouseInWindow(window, w/2, h/2);
+    }
+
     pointerHidden = disabled;
 }
 
@@ -159,7 +182,10 @@ void SDL2GameWindow::swapBuffers() {
 // code to convert mousecoordinates to frustrum for vertex placement
 //targetPosition.x = targetLeftMost + (sourcePosition.x / sourceWidth) * targetWidth
 
-glFinish();
+    if (pointerHidden) {
+        SDL_GL_SwapWindow(window);
+        return;
+    }
 
     int fbfd = open("/dev/fb0", O_RDWR);
     if (fbfd < 0) {
@@ -182,6 +208,63 @@ glFinish();
     char *fbdata = (char*)mmap (0, fb_data_size,
             PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, (off_t)0);
 
+    int x, y, w, h;
+    SDL_GetMouseState(&x, &y);
+
+    for(int d=0; d<fb_width; d++) {
+        int offset = (y * fb_width + d) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255;
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255;
+    }
+    for(int d=0; d<fb_height; d++) {
+        int offset = (d * fb_width + x) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255;
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255;
+    }
+
+    glFinish();
+    SDL_GL_SwapWindow(window);
+
+    for(int d=0; d<fb_width; d++) {
+        int offset = (y * fb_width + d) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255;
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255;
+    }
+    for(int d=0; d<fb_height; d++) {
+        int offset = (d * fb_width + x) * 4;
+        int r=255, g=255, b=0;
+        fbdata [offset + 0] = b;
+        fbdata [offset + 1] = g;
+        fbdata [offset + 2] = r;
+        fbdata [offset + 3] = 255;
+        fbdata [page_offset + offset + 0] = b;
+        fbdata [page_offset + offset + 1] = g;
+        fbdata [page_offset + offset + 2] = r;
+        fbdata [page_offset + offset + 3] = 255;
+    }
+
+/*
     for(int x=0; x<32; x++) {
       for(int y=0; y<32; y++) {
         int offset = (y * fb_width + x) * 4;
@@ -197,6 +280,7 @@ glFinish();
       }
     }
 
+    glFinish();
     SDL_GL_SwapWindow(window);
 
     for(int x=0; x<32; x++) {
@@ -213,7 +297,7 @@ glFinish();
         fbdata [page_offset + offset + 3] = 255; // May not be neeeded
       }
     }
-
+*/
     munmap (fbdata, fb_data_size);
     ::close(fbfd);
 }

@@ -12,6 +12,8 @@ private:
     SDL_Surface *mousePointer, *fb0;;
     bool pointerHidden;
 
+    void handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent);
+    void handleMouseClickEvent(SDL_MouseButtonEvent *clickevent);
     void handleKeyboardEvent(SDL_KeyboardEvent *event);
     KeyCode getKeyMinecraft(int keyCode);
 
