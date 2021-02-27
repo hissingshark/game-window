@@ -208,96 +208,52 @@ void SDL2GameWindow::swapBuffers() {
     char *fbdata = (char*)mmap (0, fb_data_size,
             PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, (off_t)0);
 
-    int x, y, w, h;
-    SDL_GetMouseState(&x, &y);
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
 
-    for(int d=0; d<fb_width; d++) {
-        int offset = (y * fb_width + d) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255;
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255;
+  for(int u=0; u<mpw; u++) {
+    for(int v=0; v<mpw; v++) {
+      if (!mpi[u][v][3])
+        continue;
+      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
+        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
+          int offset = (y * fb_width + x) * 4;
+          fbdata [offset + 0] = mpi[u][v][2];
+          fbdata [offset + 1] = mpi[u][v][1];
+          fbdata [offset + 2] = mpi[u][v][0];
+          fbdata [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
+          fbdata [page_offset + offset + 0] = mpi[u][v][2];
+          fbdata [page_offset + offset + 1] = mpi[u][v][1];
+          fbdata [page_offset + offset + 2] = mpi[u][v][0];
+          fbdata [page_offset + offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
+        }
+      }
     }
-    for(int d=0; d<fb_height; d++) {
-        int offset = (d * fb_width + x) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255;
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255;
-    }
+  }
 
     glFinish();
     SDL_GL_SwapWindow(window);
 
-    for(int d=0; d<fb_width; d++) {
-        int offset = (y * fb_width + d) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255;
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255;
-    }
-    for(int d=0; d<fb_height; d++) {
-        int offset = (d * fb_width + x) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255;
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255;
-    }
-
-/*
-    for(int x=0; x<32; x++) {
-      for(int y=0; y<32; y++) {
-        int offset = (y * fb_width + x) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255; // May not be neeeded
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255; // May not be neeeded
+  for(int u=0; u<mpw; u++) {
+    for(int v=0; v<mpw; v++) {
+      if (!mpi[u][v][3])
+        continue;
+      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
+        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
+          int offset = (y * fb_width + x) * 4;
+          fbdata [offset + 0] = mpi[u][v][2];
+          fbdata [offset + 1] = mpi[u][v][1];
+          fbdata [offset + 2] = mpi[u][v][0];
+          fbdata [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
+          fbdata [page_offset + offset + 0] = mpi[u][v][2];
+          fbdata [page_offset + offset + 1] = mpi[u][v][1];
+          fbdata [page_offset + offset + 2] = mpi[u][v][0];
+          fbdata [page_offset + offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
+        }
       }
     }
+  }
 
-    glFinish();
-    SDL_GL_SwapWindow(window);
-
-    for(int x=0; x<32; x++) {
-      for(int y=0; y<32; y++) {
-        int offset = (y * fb_width + x) * 4;
-        int r=255, g=255, b=0;
-        fbdata [offset + 0] = b;
-        fbdata [offset + 1] = g;
-        fbdata [offset + 2] = r;
-        fbdata [offset + 3] = 255; // May not be neeeded
-        fbdata [page_offset + offset + 0] = b;
-        fbdata [page_offset + offset + 1] = g;
-        fbdata [page_offset + offset + 2] = r;
-        fbdata [page_offset + offset + 3] = 255; // May not be neeeded
-      }
-    }
-*/
     munmap (fbdata, fb_data_size);
     ::close(fbfd);
 }
