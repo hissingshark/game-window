@@ -1,11 +1,13 @@
 #include "window_sdl2.h"
 #include "game_window_manager.h"
 
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
 #include <SDL2/SDL.h>
 //#include <SDL2/SDL_image.h>
 
-#define GL_GLEXT_PROTOTYPES 1
-#include <SDL2/SDL_opengles2.h>
+//#define GL_GLEXT_PROTOTYPES 1
+//#include <SDL2/SDL_opengles2.h>
 
 #include <linux/fb.h>
 #include <stdio.h>
@@ -21,29 +23,15 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
         GameWindow(title, width, height, api) {
 
     currentGameWindow = this;
-    pointerHidden = false;
-    window = NULL;
-    glcontext = NULL;
-    mousePointer = NULL;
-    fb0 = NULL;
+    cursor.hidden = false;
 
-    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
-        SDL_Log("Unable to initialize SDL for video and events: %s", SDL_GetError());
-//        return 1; // TODO is this how we handle errors? We cannot return from here
-    }
-
+    initFrameBuffer();
+    initEGL();
+    initSDL();
+    initCursor();
 /*
-    if ((IMG_Init(IMG_INIT_PNG)&IMG_INIT_PNG) != IMG_INIT_PNG) {
-        SDL_Log("Unable to initialize SDL_image for png loading: %s", SDL_GetError());
-//        return 1;
-    }
-*/
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-//    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 1);
-    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+//    window = NULL;
+//    glcontext = NULL;
 
     window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
     if (window == NULL) {
@@ -51,34 +39,118 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 //        return 1;
     }
 
-    fb0 = SDL_GetWindowSurface(window);
-    if (fb0 == NULL) {
-        printf("DEBUG: Could not create SDL window surface (framebuffer): %s\n", SDL_GetError());
-//        return 1;
-    }
-
-    // let's just show some classic code for reference
-    mousePointer = SDL_LoadBMP("pointer.bmp"); // loads image
-
     glcontext = SDL_GL_CreateContext(window);
     if (glcontext == NULL) {
         printf("DEBUG: Could not create SDL glContext: %s\n", SDL_GetError());
-//        return 1;
-    }
-/*
-    mousePointer = IMG_LoadTexture(renderer, "./gfx/mousepointer.png");
-    if (mousePointer == NULL) {
-        printf("Could not load png for mouse pointer: %s\n", SDL_GetError());
 //        return 1;
     }
 */
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
-    SDL_FreeSurface(mousePointer);
-    SDL_GL_DeleteContext(glcontext);
-    SDL_DestroyWindow(window);
+    munmap (fb.data, fb.data_size);
+    ::close(fb.fd);
+
     SDL_Quit();
+}
+
+void SDL2GameWindow::initFrameBuffer() {
+    fb.fd = open("/dev/fb0", O_RDWR);
+    if (fb.fd < 0) {
+      printf("Failed to open fb0\n");
+      return;
+    }
+
+    struct fb_var_screeninfo vinfo;
+
+    ioctl (fb.fd, FBIOGET_VSCREENINFO, &vinfo);
+
+    fb.width = vinfo.xres;
+    fb.height = vinfo.yres;
+    int fb_bpp = vinfo.bits_per_pixel;
+    int fb_bytes = fb_bpp / 8;
+
+    fb.data_size = fb.width * fb.height * fb_bytes * 2;
+    int page_offset = (fb.height * fb.width * 4);
+
+    fb.data = (char*)mmap (0, fb.data_size,
+            PROT_READ | PROT_WRITE, MAP_SHARED, fb.fd, (off_t)0);
+}
+
+void SDL2GameWindow::initEGL() {
+// init EGL diplay, window , surface and context
+        EGLConfig config;
+        EGLint num_config;
+        EGLint const attribute_list[] = {
+            EGL_RED_SIZE, 1,
+            EGL_GREEN_SIZE, 1,
+            EGL_BLUE_SIZE, 1,
+            EGL_NONE
+        };
+
+        egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+        eglInitialize(egl.display, NULL, NULL);
+        eglChooseConfig(egl.display, attribute_list, &config, 1, &num_config);
+        eglBindAPI(EGL_OPENGL_ES_API);
+        egl.context = eglCreateContext(egl.display, config, EGL_NO_CONTEXT, NULL);
+        egl.surface = eglCreateWindowSurface(egl.display, config, 0, NULL);
+        eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context);
+
+// include GL testing to find the backbuffer address
+}
+
+void SDL2GameWindow::initSDL() {
+    if (SDL_Init(SDL_INIT_EVENTS) != 0) {
+        SDL_Log("Unable to initialize SDL for input: %s", SDL_GetError());
+//        return 1; // TODO is this how we handle errors? We cannot return from here
+    }
+}
+
+void SDL2GameWindow::initCursor() {
+// scale to 1/8th of the screen  height e.g h / 8 / 16
+
+const char mpw = 16, mps = 8;
+const char mpi[16][16][4] = {
+{{6,61,51,255}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{2,32,26,255}, {165,253,240,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {24,139,120,255}, {47,236,204,255}, {2,32,26,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {13,99,84,255}, {24,139,120,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {6,61,51,255}, {2,32,26,255}, {104,77,24,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {35,24,3,255}, {138,103,34,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {35,24,3,255}, {104,77,24,255}, {6,61,51,255}, {6,61,51,255}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {13,99,84,255}, {6,61,51,255}},
+{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {2,32,26,255}}};
+
+    int mx, my;
+    SDL_GetMouseState(&mx, &my);
+
+  for(int u=0; u<mpw; u++) {
+    for(int v=0; v<mpw; v++) {
+      if (!mpi[u][v][3])
+        continue;
+      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
+        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
+          int offset = (y * fb.width + x) * 4;
+          fb.data [offset + 0] = mpi[u][v][2];
+          fb.data [offset + 1] = mpi[u][v][1];
+          fb.data [offset + 2] = mpi[u][v][0];
+          fb.data [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
+        }
+      }
+    }
+  }
+
+}
+
+void SDL2GameWindow::drawCursor() {
+    // clip and draw pre-scaled image
 }
 
 void SDL2GameWindow::setIcon(std::string const& iconPath) {
@@ -86,7 +158,9 @@ void SDL2GameWindow::setIcon(std::string const& iconPath) {
 }
 
 void SDL2GameWindow::getWindowSize(int& width, int& height) const {
-    SDL_GetWindowSize(window, &width, &height);
+//    SDL_GetWindowSize(window, &width, &height);
+    width = fb.width;
+    height = fb.height;
 }
 
 void SDL2GameWindow::show() {
@@ -121,7 +195,7 @@ void SDL2GameWindow::pollEvents() {
 }
 
 void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
-    if (pointerHidden) {
+    if (cursor.hidden) {
         currentGameWindow->onMouseRelativePosition(motionevent->xrel, motionevent->yrel);
     }
     else {
@@ -159,15 +233,18 @@ void SDL2GameWindow::setCursorDisabled(bool disabled) {
     if (disabled)
         SDL_SetRelativeMouseMode(SDL_TRUE);
     else {
-        // these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
+        // TODO test without - these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
         SDL_SetRelativeMouseMode(SDL_FALSE);
 
-        int w, h;
-        SDL_GetWindowSize(window, &w, &h);
-        SDL_WarpMouseInWindow(window, w/2, h/2);
+        // warp mouse to center for first display
+        cursor.x = fb.width/2;
+        cursor.y = fb.height/2;
+//        int w, h;
+//        SDL_GetWindowSize(window, &w, &h);
+//        SDL_WarpMouseInWindow(window, w/2, h/2);
     }
 
-    pointerHidden = disabled;
+    cursor.hidden = disabled;
 }
 
 void SDL2GameWindow::setFullscreen(bool fullscreen) {
@@ -179,91 +256,102 @@ void SDL2GameWindow::setClipboardText(std::string const &text) {
 }
 
 void SDL2GameWindow::swapBuffers() {
-// code to convert mousecoordinates to frustrum for vertex placement
-//targetPosition.x = targetLeftMost + (sourcePosition.x / sourceWidth) * targetWidth
-
-    if (pointerHidden) {
-        SDL_GL_SwapWindow(window);
+    if (cursor.hidden) {
+        eglSwapBuffers(egl.display, egl.surface);
+//        SDL_GL_SwapWindow(window);
         return;
     }
 
-    int fbfd = open("/dev/fb0", O_RDWR);
-    if (fbfd < 0) {
-      printf("Failed to open fb0\n");
-      return;
-    }
-
-    struct fb_var_screeninfo vinfo;
-
-    ioctl (fbfd, FBIOGET_VSCREENINFO, &vinfo);
-
-    int fb_width = vinfo.xres;
-    int fb_height = vinfo.yres;
-    int fb_bpp = vinfo.bits_per_pixel;
-    int fb_bytes = fb_bpp / 8;
-
-    int fb_data_size = fb_width * fb_height * fb_bytes *2;
-    int page_offset = (fb_height * fb_width * 4);
-
-    char *fbdata = (char*)mmap (0, fb_data_size,
-            PROT_READ | PROT_WRITE, MAP_SHARED, fbfd, (off_t)0);
-
-    int mx, my;
-    SDL_GetMouseState(&mx, &my);
-
-  for(int u=0; u<mpw; u++) {
-    for(int v=0; v<mpw; v++) {
-      if (!mpi[u][v][3])
-        continue;
-      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
-        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
-          int offset = (y * fb_width + x) * 4;
-          fbdata [offset + 0] = mpi[u][v][2];
-          fbdata [offset + 1] = mpi[u][v][1];
-          fbdata [offset + 2] = mpi[u][v][0];
-          fbdata [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
-          fbdata [page_offset + offset + 0] = mpi[u][v][2];
-          fbdata [page_offset + offset + 1] = mpi[u][v][1];
-          fbdata [page_offset + offset + 2] = mpi[u][v][0];
-          fbdata [page_offset + offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
-        }
-      }
-    }
-  }
-
     glFinish();
-    SDL_GL_SwapWindow(window);
+    eglSwapBuffers(egl.display, egl.surface);
+//    SDL_GL_SwapWindow(window);
 
-  for(int u=0; u<mpw; u++) {
-    for(int v=0; v<mpw; v++) {
-      if (!mpi[u][v][3])
-        continue;
-      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
-        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
-          int offset = (y * fb_width + x) * 4;
-          fbdata [offset + 0] = mpi[u][v][2];
-          fbdata [offset + 1] = mpi[u][v][1];
-          fbdata [offset + 2] = mpi[u][v][0];
-          fbdata [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
-          fbdata [page_offset + offset + 0] = mpi[u][v][2];
-          fbdata [page_offset + offset + 1] = mpi[u][v][1];
-          fbdata [page_offset + offset + 2] = mpi[u][v][0];
-          fbdata [page_offset + offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
-        }
-      }
-    }
-  }
-
-    munmap (fbdata, fb_data_size);
-    ::close(fbfd);
 }
 
 void SDL2GameWindow::setSwapInterval(int interval) {
-    SDL_GL_SetSwapInterval(interval);
+//    SDL_GL_SetSwapInterval(interval);
+    eglSwapInterval(egl.display, interval);
 }
 
 // TODO fix QWERTY and numpad mapping.  ? use scancode instead of keysym?
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
+    if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
+        return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
+    switch (keyCode) {
+        case SDLK_BACKSPACE:
+            return KeyCode::BACKSPACE;
+        case SDLK_TAB:
+            return KeyCode::TAB;
+        case SDLK_RETURN:
+            return KeyCode::ENTER;
+        case SDLK_LSHIFT:
+            return KeyCode::LEFT_SHIFT;
+        case SDLK_RSHIFT:
+            return KeyCode::RIGHT_SHIFT;
+        case SDLK_LCTRL:
+            return KeyCode::LEFT_CTRL;
+        case SDLK_RCTRL:
+            return KeyCode::RIGHT_CTRL;
+        case SDLK_PAUSE:
+            return KeyCode::PAUSE;
+        case SDLK_CAPSLOCK:
+            return KeyCode::CAPS_LOCK;
+        case SDLK_ESCAPE:
+            return KeyCode::ESCAPE;
+        case SDLK_PAGEUP:
+            return KeyCode::PAGE_UP;
+        case SDLK_PAGEDOWN:
+            return KeyCode::PAGE_DOWN;
+        case SDLK_END:
+            return KeyCode::END;
+        case SDLK_HOME:
+            return KeyCode::HOME;
+        case SDLK_LEFT:
+            return KeyCode::LEFT;
+        case SDLK_UP:
+            return KeyCode::UP;
+        case SDLK_RIGHT:
+            return KeyCode::RIGHT;
+        case SDLK_DOWN:
+            return KeyCode::DOWN;
+        case SDLK_INSERT:
+            return KeyCode::INSERT;
+        case SDLK_DELETE:
+            return KeyCode::DELETE;
+        case SDLK_NUMLOCKCLEAR:
+            return KeyCode::NUM_LOCK;
+        case SDLK_SCROLLLOCK:
+            return KeyCode::SCROLL_LOCK;
+        case SDLK_SEMICOLON:
+            return KeyCode::SEMICOLON;
+        case SDLK_EQUALS:
+            return KeyCode::EQUAL;
+        case SDLK_COMMA:
+            return KeyCode::COMMA;
+        case SDLK_MINUS:
+            return KeyCode::MINUS;
+        case SDLK_PERIOD:
+            return KeyCode::PERIOD;
+        case SDLK_SLASH:
+            return KeyCode::SLASH;
+        case SDLK_BACKQUOTE:
+            return KeyCode::GRAVE;
+        case SDLK_LEFTBRACKET:
+            return KeyCode::LEFT_BRACKET;
+        case SDLK_BACKSLASH:
+            return KeyCode::BACKSLASH;
+        case SDLK_RIGHTBRACKET:
+            return KeyCode::RIGHT_BRACKET;
+        case SDLK_QUOTE:
+            return KeyCode::APOSTROPHE;
+        case SDLK_APPLICATION:
+            return KeyCode::LEFT_SUPER;
+        case SDLK_LALT:
+            return KeyCode::LEFT_ALT;
+        case SDLK_RALT:
+            return KeyCode::RIGHT_ALT;
+    }
+/*
     if (keyCode >= SDL_SCANCODE_F1 && keyCode <= SDL_SCANCODE_F12)
         return (KeyCode) (keyCode - SDL_SCANCODE_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
@@ -340,6 +428,7 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDL_SCANCODE_RALT:
             return KeyCode::RIGHT_ALT;
     }
+*/
     if (keyCode < 256)
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;
