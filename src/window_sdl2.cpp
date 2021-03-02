@@ -6,7 +6,7 @@
 #include <SDL2/SDL.h>
 //#include <SDL2/SDL_image.h>
 
-//#define GL_GLEXT_PROTOTYPES 1
+#define GL_GLEXT_PROTOTYPES 1
 //#include <SDL2/SDL_opengles2.h>
 
 #include <linux/fb.h>
@@ -28,28 +28,16 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
     initFrameBuffer();
     initEGL();
     initSDL();
-    initCursor();
-/*
-//    window = NULL;
-//    glcontext = NULL;
-
-    window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_OPENGL|SDL_WINDOW_FULLSCREEN);
-    if (window == NULL) {
-        printf("Could not create SDL window: %s\n", SDL_GetError());
-//        return 1;
-    }
-
-    glcontext = SDL_GL_CreateContext(window);
-    if (glcontext == NULL) {
-        printf("DEBUG: Could not create SDL glContext: %s\n", SDL_GetError());
-//        return 1;
-    }
-*/
+//    initCursor();
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
     munmap (fb.data, fb.data_size);
     ::close(fb.fd);
+
+    eglDestroySurface(egl.display, egl.surface);
+    eglDestroyContext(egl.display, egl.context);
+    eglMakeCurrent(egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
     SDL_Quit();
 }
@@ -78,6 +66,10 @@ void SDL2GameWindow::initFrameBuffer() {
 }
 
 void SDL2GameWindow::initEGL() {
+int x, y;
+getWindowSize(x, y);
+printf("Window is %d x %d\n", x, y);
+
 // init EGL diplay, window , surface and context
         EGLConfig config;
         EGLint num_config;
@@ -85,16 +77,34 @@ void SDL2GameWindow::initEGL() {
             EGL_RED_SIZE, 1,
             EGL_GREEN_SIZE, 1,
             EGL_BLUE_SIZE, 1,
+            EGL_ALPHA_SIZE, 1,
+            EGL_DEPTH_SIZE, 1,
+            EGL_STENCIL_SIZE, 8,
             EGL_NONE
         };
 
         egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        eglInitialize(egl.display, NULL, NULL);
+        printf("EGL display = %d", egl.display);
+
+        if (! eglInitialize(egl.display, NULL, NULL))
+            printf("Failed to initialize EGL Display!");
+
         eglChooseConfig(egl.display, attribute_list, &config, 1, &num_config);
-        eglBindAPI(EGL_OPENGL_ES_API);
+
+        if (! eglBindAPI(EGL_OPENGL_ES_API))
+            printf("Failed to bind EGL API!");
+
         egl.context = eglCreateContext(egl.display, config, EGL_NO_CONTEXT, NULL);
+        if (! egl.context)
+            printf("Failed to create EGL Context!");
+
         egl.surface = eglCreateWindowSurface(egl.display, config, 0, NULL);
-        eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context);
+        if (! egl.surface)
+            printf("Failed to create EGL Window Surface!");
+
+        if (! eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context))
+            printf("Failed to make EGL Context current!");
+
 
 // include GL testing to find the backbuffer address
 }
@@ -231,17 +241,15 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
     if (disabled)
-        SDL_SetRelativeMouseMode(SDL_TRUE);
+//        SDL_SetRelativeMouseMode(SDL_TRUE);
+;
     else {
         // TODO test without - these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
-        SDL_SetRelativeMouseMode(SDL_FALSE);
-
+//        SDL_SetRelativeMouseMode(SDL_FALSE);
+;
         // warp mouse to center for first display
-        cursor.x = fb.width/2;
-        cursor.y = fb.height/2;
-//        int w, h;
-//        SDL_GetWindowSize(window, &w, &h);
-//        SDL_WarpMouseInWindow(window, w/2, h/2);
+        cursor.x = fb.width / 2;
+        cursor.y = fb.height / 2;
     }
 
     cursor.hidden = disabled;
@@ -256,16 +264,13 @@ void SDL2GameWindow::setClipboardText(std::string const &text) {
 }
 
 void SDL2GameWindow::swapBuffers() {
-    if (cursor.hidden) {
-        eglSwapBuffers(egl.display, egl.surface);
-//        SDL_GL_SwapWindow(window);
-        return;
+printf("Swapping buffers!\n");
+    if (! cursor.hidden) {
+        glFinish();
+        drawCursor();
     }
 
-    glFinish();
     eglSwapBuffers(egl.display, egl.surface);
-//    SDL_GL_SwapWindow(window);
-
 }
 
 void SDL2GameWindow::setSwapInterval(int interval) {
