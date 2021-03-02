@@ -3,6 +3,7 @@
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 #include <SDL2/SDL.h>
 //#include <SDL2/SDL_image.h>
 
@@ -80,32 +81,54 @@ printf("Window is %d x %d\n", x, y);
             EGL_ALPHA_SIZE, 1,
             EGL_DEPTH_SIZE, 1,
             EGL_STENCIL_SIZE, 8,
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
             EGL_NONE
         };
 
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
         egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        printf("EGL display = %d", egl.display);
+        printf("EGL display = %d\n", egl.display);
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         if (! eglInitialize(egl.display, NULL, NULL))
-            printf("Failed to initialize EGL Display!");
+            printf("Failed to initialize EGL Display!\n");
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         eglChooseConfig(egl.display, attribute_list, &config, 1, &num_config);
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         if (! eglBindAPI(EGL_OPENGL_ES_API))
-            printf("Failed to bind EGL API!");
+            printf("Failed to bind EGL API!\n");
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         egl.context = eglCreateContext(egl.display, config, EGL_NO_CONTEXT, NULL);
         if (! egl.context)
-            printf("Failed to create EGL Context!");
+            printf("Failed to create EGL Context!\n");
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         egl.surface = eglCreateWindowSurface(egl.display, config, 0, NULL);
-        if (! egl.surface)
-            printf("Failed to create EGL Window Surface!");
+        if (egl.surface == EGL_NO_SURFACE)
+            printf("Failed to create EGL Window Surface!\n");
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
         if (! eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context))
-            printf("Failed to make EGL Context current!");
+            printf("Failed to make EGL Context current!\n");
+if (eglGetError() != EGL_SUCCESS)
+    printf("EGL error!\n");
 
-
+        glClearColor(1.0, 1.0, 0.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glFinish();
+        eglSwapBuffers(egl.display, egl.surface);
+        sleep(10);
 // include GL testing to find the backbuffer address
 }
 
