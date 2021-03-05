@@ -5,36 +5,48 @@
 #include <SDL2/SDL.h>
 
 
+struct bgra_pixel {
+    // channels in framebuffer order
+    char b;
+    char g;
+    char r;
+    char a;
+};
+
 
 class SDL2GameWindow : public GameWindow {
 
 private:
 
-struct framebuffer_state {
-    int fd;
-    char *data;
-    int width;
-    int height;
-    char *bb;
-    int data_size;
-} fb;
+    struct framebuffer_state {
+        int fd;
+//        char *mmap;
+        bgra_pixel *mmap;
+        int mmap_size;
+        int w;
+        int h;
+        bgra_pixel *backbuff;
+    } fb;
 
-struct egl_state {
-    EGLDisplay display;
-    EGLContext context;
-    EGLSurface surface;
-} egl;
+    struct egl_state {
+        EGLDisplay display;
+        EGLContext context;
+        EGLSurface surface;
+    } egl;
 
-struct cursor_state {
-    char *image;
-    int size;
-    bool hidden;
-    int x;
-    int y;
-} cursor;
+    struct sdl_state {
+        SDL_Window *window;
+    } sdl;
+
+    struct cursor_state {
+        bgra_pixel **img;
+        int size;
+        bool hidden;
+        int x;
+        int y;
+    } cursor;
 
     SDL2GameWindow *currentGameWindow;
-//    window_state ws;
 
     void initFrameBuffer();
     void initEGL();

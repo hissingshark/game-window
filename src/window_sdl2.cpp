@@ -2,13 +2,10 @@
 #include "game_window_manager.h"
 
 #include <EGL/egl.h>
+//#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
+//#include <GLES2/gl2ext.h>
 #include <SDL2/SDL.h>
-//#include <SDL2/SDL_image.h>
-
-#define GL_GLEXT_PROTOTYPES 1
-//#include <SDL2/SDL_opengles2.h>
 
 #include <linux/fb.h>
 #include <stdio.h>
@@ -17,36 +14,37 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <stdlib.h>
-
 #include <unistd.h>
 
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
 
     currentGameWindow = this;
-    cursor.hidden = false;
 
     initFrameBuffer();
     initEGL();
     initSDL();
-//    initCursor();
+    initCursor();
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
-    munmap (fb.data, fb.data_size);
+    munmap (fb.mmap, fb.mmap_size);
     ::close(fb.fd);
+    delete cursor.img;
 
     eglDestroySurface(egl.display, egl.surface);
     eglDestroyContext(egl.display, egl.context);
     eglMakeCurrent(egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
 
+    SDL_DestroyWindow(sdl.window);
     SDL_Quit();
 }
 
 void SDL2GameWindow::initFrameBuffer() {
+    // map framebuffer for drawing operations and to get dimensions
     fb.fd = open("/dev/fb0", O_RDWR);
     if (fb.fd < 0) {
-      printf("Failed to open fb0\n");
+      printf("Failed to open fb0!\n");
       return;
     }
 
@@ -54,136 +52,150 @@ void SDL2GameWindow::initFrameBuffer() {
 
     ioctl (fb.fd, FBIOGET_VSCREENINFO, &vinfo);
 
-    fb.width = vinfo.xres;
-    fb.height = vinfo.yres;
+    fb.w = vinfo.xres;
+    fb.h = vinfo.yres;
     int fb_bpp = vinfo.bits_per_pixel;
     int fb_bytes = fb_bpp / 8;
 
-    fb.data_size = fb.width * fb.height * fb_bytes * 2;
-    int page_offset = (fb.height * fb.width * 4);
+    fb.mmap_size = fb.w * fb.h * fb_bytes * 2;
 
-    fb.data = (char*)mmap (0, fb.data_size,
+    fb.mmap = (bgra_pixel*)mmap (0, fb.mmap_size,
             PROT_READ | PROT_WRITE, MAP_SHARED, fb.fd, (off_t)0);
+// this was for writing to both buffers, but we should be determining which is the back buffer?
+//    int page_offset = (fb.h * fb.w * 4);
+    fb.backbuff = fb.mmap; // for now - may be front, may be back
 }
 
 void SDL2GameWindow::initEGL() {
-int x, y;
-getWindowSize(x, y);
-printf("Window is %d x %d\n", x, y);
+    // init EGL diplay, window, surface and context
+    EGLConfig config;
+    EGLint num_config;
+    EGLint const config_attribute_list[] = {
+        EGL_RED_SIZE, 1,
+        EGL_GREEN_SIZE, 1,
+        EGL_BLUE_SIZE, 1,
+        EGL_ALPHA_SIZE, 1,
+        EGL_DEPTH_SIZE, 1,
+        EGL_STENCIL_SIZE, 8,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_NONE
+    };
+    EGLint const context_attribute_list[] = {
+        EGL_CONTEXT_CLIENT_VERSION, 2,
+        EGL_NONE
+    };
 
-// init EGL diplay, window , surface and context
-        EGLConfig config;
-        EGLint num_config;
-        EGLint const attribute_list[] = {
-            EGL_RED_SIZE, 1,
-            EGL_GREEN_SIZE, 1,
-            EGL_BLUE_SIZE, 1,
-            EGL_ALPHA_SIZE, 1,
-            EGL_DEPTH_SIZE, 1,
-            EGL_STENCIL_SIZE, 8,
-            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-            EGL_NONE
-        };
+    egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (eglGetError() != EGL_SUCCESS)
+        printf("EGL error when getting display!\n");
 
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
-        egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        printf("EGL display = %d\n", egl.display);
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    if (! eglInitialize(egl.display, NULL, NULL))
+        printf("Failed to initialize EGL Display!\n");
 
-        if (! eglInitialize(egl.display, NULL, NULL))
-            printf("Failed to initialize EGL Display!\n");
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    eglChooseConfig(egl.display, config_attribute_list, &config, 1, &num_config);
+    if (eglGetError() != EGL_SUCCESS)
+        printf("EGL error when choosing config!\n");
 
-        eglChooseConfig(egl.display, attribute_list, &config, 1, &num_config);
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    if (! eglBindAPI(EGL_OPENGL_ES_API))
+        printf("Failed to bind EGL API!\n");
 
-        if (! eglBindAPI(EGL_OPENGL_ES_API))
-            printf("Failed to bind EGL API!\n");
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    egl.context = eglCreateContext(egl.display, config, EGL_NO_CONTEXT, context_attribute_list);
+    if (! egl.context)
+        printf("Failed to create EGL Context!\n");
 
-        egl.context = eglCreateContext(egl.display, config, EGL_NO_CONTEXT, NULL);
-        if (! egl.context)
-            printf("Failed to create EGL Context!\n");
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    egl.surface = eglCreateWindowSurface(egl.display, config, NULL, NULL);
+    if (egl.surface == EGL_NO_SURFACE)
+        printf("Failed to create EGL Window Surface!\n");
 
-        egl.surface = eglCreateWindowSurface(egl.display, config, 0, NULL);
-        if (egl.surface == EGL_NO_SURFACE)
-            printf("Failed to create EGL Window Surface!\n");
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
+    if (! eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context))
+        printf("Failed to make EGL Context current!\n");
 
-        if (! eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context))
-            printf("Failed to make EGL Context current!\n");
-if (eglGetError() != EGL_SUCCESS)
-    printf("EGL error!\n");
-
-        glClearColor(1.0, 1.0, 0.0, 1.0);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glFinish();
-        eglSwapBuffers(egl.display, egl.surface);
-        sleep(10);
 // include GL testing to find the backbuffer address
 }
 
 void SDL2GameWindow::initSDL() {
-    if (SDL_Init(SDL_INIT_EVENTS) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
         SDL_Log("Unable to initialize SDL for input: %s", SDL_GetError());
 //        return 1; // TODO is this how we handle errors? We cannot return from here
+    }
+
+//    sdl.window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, fb.w, fb.h, SDL_WINDOW_HIDDEN|SDL_WINDOW_FOREIGN);
+    sdl.window = SDL_CreateWindowFrom(NULL);
+    if (sdl.window == NULL) {
+        printf("Could not create SDL window: %s\n", SDL_GetError());
+//        return 1;
     }
 }
 
 void SDL2GameWindow::initCursor() {
-// scale to 1/8th of the screen  height e.g h / 8 / 16
+    const char mcw = 16; // raw mouse cursor image width
+    // rgba mouse cursor image data
+    const char mci[16][16][4] = {
+    {{6,61,51,255}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{2,32,26,255}, {165,253,240,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {24,139,120,255}, {47,236,204,255}, {2,32,26,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {13,99,84,255}, {24,139,120,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {6,61,51,255}, {2,32,26,255}, {104,77,24,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {35,24,3,255}, {138,103,34,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {35,24,3,255}, {104,77,24,255}, {6,61,51,255}, {6,61,51,255}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {13,99,84,255}, {6,61,51,255}},
+    {{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {2,32,26,255}}};
 
-const char mpw = 16, mps = 8;
-const char mpi[16][16][4] = {
-{{6,61,51,255}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{2,32,26,255}, {165,253,240,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {2,32,26,255}, {165,253,240,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {165,253,240,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {6,61,51,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {38,200,174,255}, {47,236,204,255}, {6,61,51,255}, {0,0,0,0}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {24,139,120,255}, {47,236,204,255}, {2,32,26,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {47,236,204,255}, {13,99,84,255}, {24,139,120,255}, {24,139,120,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {13,99,84,255}, {6,61,51,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {6,61,51,255}, {2,32,26,255}, {104,77,24,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {6,61,51,255}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {35,24,3,255}, {138,103,34,255}, {71,51,13,255}, {0,0,0,0}, {0,0,0,0}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {35,24,3,255}, {104,77,24,255}, {6,61,51,255}, {6,61,51,255}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {13,99,84,255}, {6,61,51,255}},
-{{0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {0,0,0,0}, {2,32,26,255}, {2,32,26,255}, {2,32,26,255}}};
+    // calculate scale factor to make mouse cursor image 1/8th of screen height
+    const char mcs = fb.h / 8 / mcw;
+    cursor.size = mcw * mcs; // store width for drawing operations later
 
-    int mx, my;
-    SDL_GetMouseState(&mx, &my);
-
-  for(int u=0; u<mpw; u++) {
-    for(int v=0; v<mpw; v++) {
-      if (!mpi[u][v][3])
-        continue;
-      for(int x=mx+(u*mps); x<mx+(u*mps)+mps; x++) {
-        for(int y=my+(v*mps); y<my+(v*mps)+mps; y++) {
-          int offset = (y * fb.width + x) * 4;
-          fb.data [offset + 0] = mpi[u][v][2];
-          fb.data [offset + 1] = mpi[u][v][1];
-          fb.data [offset + 2] = mpi[u][v][0];
-          fb.data [offset + 3] = 255; // alpha at max opacity to avoid a black pixel (rather than a transparent one)
-        }
-      }
+    // allocate storage for scaled cursor image
+    cursor.img =  new bgra_pixel*[mcw*mcs]; // allocate rows
+    // allocate columns
+    for(int row=0; row<(mcw*mcs); row++) {
+        cursor.img[row] = new bgra_pixel[mcw * mcs];
     }
-  }
 
+    // scale image into storage, remapping from rgba to bgra in the process
+    for(int u=0; u<mcw; u++) {
+        for(int v=0; v<mcw; v++) {
+            bgra_pixel pix = { .b = mci[u][v][2], .g = mci[u][v][1], .r = mci[u][v][0], .a = mci[u][v][3] }; // remap raw to pixel
+            // draw pixel as scaled square
+            for(int x=u*mcs; x<(u*mcs)+mcs; x++) {
+                for(int y=v*mcs; y<(v*mcs)+mcs; y++) {
+                    cursor.img[x][y] = pix;
+                }
+            }
+        }
+    }
+
+    setCursorDisabled(false);
 }
 
 void SDL2GameWindow::drawCursor() {
-    // clip and draw pre-scaled image
+    // clip and draw pre-scaled cursor image to back surface of framebuffer at mouse position
+    int mx, my;
+//    SDL_GetMouseState(&mx, &my);
+    SDL_GetGlobalMouseState(&mx, &my);
+
+    int clipw = fb.w - mx;
+    if(clipw > cursor.size)
+        clipw = cursor.size;
+
+    int cliph = fb.h - my;
+    if(cliph > cursor.size)
+        cliph = cursor.size;
+
+    for(int u=0; u<clipw; u++) {
+        for(int v=0; v<cliph; v++) {
+            if(cursor.img[u][v].a == 255)
+                fb.backbuff[(my+v)*fb.w + (mx+u)] = cursor.img[u][v];
+        }
+    }
 }
 
 void SDL2GameWindow::setIcon(std::string const& iconPath) {
@@ -192,8 +204,8 @@ void SDL2GameWindow::setIcon(std::string const& iconPath) {
 
 void SDL2GameWindow::getWindowSize(int& width, int& height) const {
 //    SDL_GetWindowSize(window, &width, &height);
-    width = fb.width;
-    height = fb.height;
+    width = fb.w;
+    height = fb.h;
 }
 
 void SDL2GameWindow::show() {
@@ -225,6 +237,7 @@ void SDL2GameWindow::pollEvents() {
                 break;
         }
     }
+
 }
 
 void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
@@ -237,6 +250,9 @@ void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
 }
 
 void SDL2GameWindow::handleMouseClickEvent(SDL_MouseButtonEvent *clickevent) {
+    int x, y;
+    SDL_GetGlobalMouseState(&x, &y);
+    currentGameWindow->onMouseButton(x, y, clickevent->button, (clickevent->state==SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
 }
 
 void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
@@ -264,15 +280,14 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
     if (disabled)
-//        SDL_SetRelativeMouseMode(SDL_TRUE);
-;
+        SDL_SetRelativeMouseMode(SDL_TRUE);
     else {
         // TODO test without - these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
-//        SDL_SetRelativeMouseMode(SDL_FALSE);
-;
+        SDL_SetRelativeMouseMode(SDL_FALSE);
+
         // warp mouse to center for first display
-        cursor.x = fb.width / 2;
-        cursor.y = fb.height / 2;
+        cursor.x = fb.w / 2;
+        cursor.y = fb.h / 2;
     }
 
     cursor.hidden = disabled;
@@ -287,13 +302,14 @@ void SDL2GameWindow::setClipboardText(std::string const &text) {
 }
 
 void SDL2GameWindow::swapBuffers() {
-printf("Swapping buffers!\n");
+/*
     if (! cursor.hidden) {
         glFinish();
         drawCursor();
     }
-
+*/
     eglSwapBuffers(egl.display, egl.surface);
+        drawCursor(); // temp until backbuffer sync written
 }
 
 void SDL2GameWindow::setSwapInterval(int interval) {
@@ -303,6 +319,7 @@ void SDL2GameWindow::setSwapInterval(int interval) {
 
 // TODO fix QWERTY and numpad mapping.  ? use scancode instead of keysym?
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
+/*
     if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
         return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
@@ -379,7 +396,7 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDLK_RALT:
             return KeyCode::RIGHT_ALT;
     }
-/*
+*/
     if (keyCode >= SDL_SCANCODE_F1 && keyCode <= SDL_SCANCODE_F12)
         return (KeyCode) (keyCode - SDL_SCANCODE_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
@@ -456,7 +473,6 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDL_SCANCODE_RALT:
             return KeyCode::RIGHT_ALT;
     }
-*/
     if (keyCode < 256)
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;

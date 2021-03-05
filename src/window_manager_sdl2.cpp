@@ -18,30 +18,21 @@ GameWindowManager::ProcAddrFunc dlsymGetProcAddress(const char* sym) {
     if (!sym)
         return NULL;
     void *eglFunc;
-printf("Loading: %s... ", sym);
+
     // try official EGL method first
     eglFunc = (void*)eglGetProcAddress(sym);
-    if (eglFunc) {
-        printf("Success!\n");
+    if (eglFunc)
         return (GameWindowManager::ProcAddrFunc)eglFunc;
-    }
-        printf("Still trying... ");
 
     // manual fallback "If the EGL version is not 1.5 or greater, only queries of EGL and client API extension functions will succeed."
     void *libEGL;
     libEGL = dlopen("libEGL.so", RTLD_LAZY | RTLD_GLOBAL);
     if (!libEGL) {
-        printf("Error: Unable to open libEGL.so for symbol processing\n");
+        printf("Error: Unable to open libEGL.so for symbol processing");
         return NULL;
     }
 
     eglFunc = dlsym(libEGL, sym);
-    if (eglFunc) {
-        printf("Success!\n");
-    }
-    else {
-        printf("FAILED!\n");
-    }
     dlclose(libEGL);
 
     return (GameWindowManager::ProcAddrFunc)eglFunc;
