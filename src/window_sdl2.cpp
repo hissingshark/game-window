@@ -178,9 +178,7 @@ void SDL2GameWindow::initCursor() {
 
 void SDL2GameWindow::drawCursor() {
     // clip and draw pre-scaled cursor image to back surface of framebuffer at mouse position
-    int mx, my;
-//    SDL_GetMouseState(&mx, &my);
-    SDL_GetGlobalMouseState(&mx, &my);
+    int mx = cursor.x, my = cursor.y;
 
     int clipw = fb.w - mx;
     if(clipw > cursor.size)
@@ -223,9 +221,11 @@ void SDL2GameWindow::pollEvents() {
         switch (event.type) {
             case SDL_MOUSEMOTION:
                 handleMouseMotionEvent(&event.motion);
+                break;
             case SDL_MOUSEBUTTONDOWN:
             case SDL_MOUSEBUTTONUP:
                 handleMouseClickEvent(&event.button);
+                break;
             case SDL_KEYDOWN:
             case SDL_KEYUP:
                 handleKeyboardEvent(&event.key);
@@ -245,14 +245,17 @@ void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
         currentGameWindow->onMouseRelativePosition(motionevent->xrel, motionevent->yrel);
     }
     else {
-        currentGameWindow->onMousePosition(motionevent->x, motionevent->y);
+        // provide own abs coords as SDL won't do this for a "hidden window"
+        int tx = cursor.x + motionevent->xrel;
+        cursor.x = tx < 0 ? 0 : (tx >= fb.w ? fb.w-1 : tx);
+        int ty = cursor.y + motionevent->yrel;
+        cursor.y = ty < 0 ? 0 : (ty >= fb.h ? fb.h-1 : ty);
+        currentGameWindow->onMousePosition(cursor.x, cursor.y);
     }
 }
 
 void SDL2GameWindow::handleMouseClickEvent(SDL_MouseButtonEvent *clickevent) {
-    int x, y;
-    SDL_GetGlobalMouseState(&x, &y);
-    currentGameWindow->onMouseButton(x, y, clickevent->button, (clickevent->state==SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
+    currentGameWindow->onMouseButton(cursor.x, cursor.y, clickevent->button, (clickevent->state==SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
 }
 
 void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
@@ -280,10 +283,12 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
     if (disabled)
-        SDL_SetRelativeMouseMode(SDL_TRUE);
+;
+// really don't think this does anything anymore
+//        SDL_SetRelativeMouseMode(SDL_TRUE);
     else {
         // TODO test without - these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
-        SDL_SetRelativeMouseMode(SDL_FALSE);
+//        SDL_SetRelativeMouseMode(SDL_FALSE);
 
         // warp mouse to center for first display
         cursor.x = fb.w / 2;
@@ -302,24 +307,21 @@ void SDL2GameWindow::setClipboardText(std::string const &text) {
 }
 
 void SDL2GameWindow::swapBuffers() {
-/*
     if (! cursor.hidden) {
         glFinish();
         drawCursor();
     }
-*/
+
     eglSwapBuffers(egl.display, egl.surface);
-        drawCursor(); // temp until backbuffer sync written
 }
 
 void SDL2GameWindow::setSwapInterval(int interval) {
-//    SDL_GL_SetSwapInterval(interval);
     eglSwapInterval(egl.display, interval);
 }
 
-// TODO fix QWERTY and numpad mapping.  ? use scancode instead of keysym?
+// TODO fix QWERTY and numpad mapping.
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
-/*
+
     if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
         return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
@@ -396,7 +398,7 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDLK_RALT:
             return KeyCode::RIGHT_ALT;
     }
-*/
+/*
     if (keyCode >= SDL_SCANCODE_F1 && keyCode <= SDL_SCANCODE_F12)
         return (KeyCode) (keyCode - SDL_SCANCODE_F1 + (int) KeyCode::FN1);
     switch (keyCode) {
@@ -476,5 +478,6 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
     if (keyCode < 256)
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;
+*/
 }
 
