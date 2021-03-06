@@ -475,9 +475,8 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDL_SCANCODE_RALT:
             return KeyCode::RIGHT_ALT;
     }
+*/
     if (keyCode < 256)
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;
-*/
 }
-
