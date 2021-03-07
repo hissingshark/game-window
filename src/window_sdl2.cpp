@@ -2,9 +2,7 @@
 #include "game_window_manager.h"
 
 #include <EGL/egl.h>
-//#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
-//#include <GLES2/gl2ext.h>
 #include <SDL2/SDL.h>
 
 #include <linux/fb.h>
@@ -15,6 +13,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <algorithm>
 
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
@@ -57,13 +56,14 @@ void SDL2GameWindow::initFrameBuffer() {
     int fb_bpp = vinfo.bits_per_pixel;
     int fb_bytes = fb_bpp / 8;
 
-    fb.mmap_size = fb.w * fb.h * fb_bytes * 2;
+    fb.mmap_size = fb.w * fb.h * fb_bytes * 2; // double buffered so x2 size
 
     fb.mmap = (bgra_pixel*)mmap (0, fb.mmap_size,
             PROT_READ | PROT_WRITE, MAP_SHARED, fb.fd, (off_t)0);
-// this was for writing to both buffers, but we should be determining which is the back buffer?
-//    int page_offset = (fb.h * fb.w * 4);
-    fb.backbuff = fb.mmap; // for now - may be front, may be back
+
+    // assume backbuffer is the 2nd half of the memory map - will sync it up after EGL initialised
+    fb.frontbuff = fb.mmap;
+    fb.backbuff = &fb.mmap[fb.h * fb.w];
 }
 
 void SDL2GameWindow::initEGL() {
@@ -111,7 +111,21 @@ void SDL2GameWindow::initEGL() {
     if (! eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context))
         printf("Failed to make EGL Context current!\n");
 
-// include GL testing to find the backbuffer address
+    // find the backbuffer address in framebuffer in case it is out of sync
+    // first ensure both surfaces are black
+    clearColour(0.0);
+    clearColour(0.0);
+    // then clear to mid-grey and test where it landed after swapping
+    clearColour(0.5);
+    if(fb.backbuff->r == 128) // back is actually front!
+        std::swap(fb.frontbuff, fb.backbuff); // synchronise
+}
+
+void SDL2GameWindow::clearColour(float shade) {
+    glClearColor(shade, shade, shade, 1.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glFinish();
+    eglSwapBuffers(egl.display, egl.surface);
 }
 
 void SDL2GameWindow::initSDL() {
@@ -120,7 +134,6 @@ void SDL2GameWindow::initSDL() {
 //        return 1; // TODO is this how we handle errors? We cannot return from here
     }
 
-//    sdl.window = SDL_CreateWindow("Minecraft", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, fb.w, fb.h, SDL_WINDOW_HIDDEN|SDL_WINDOW_FOREIGN);
     sdl.window = SDL_CreateWindowFrom(NULL);
     if (sdl.window == NULL) {
         printf("Could not create SDL window: %s\n", SDL_GetError());
@@ -177,19 +190,19 @@ void SDL2GameWindow::initCursor() {
 }
 
 void SDL2GameWindow::drawCursor() {
-    // clip and draw pre-scaled cursor image to back surface of framebuffer at mouse position
+    // clip and draw pre-scaled cursor image to back half of framebuffer at mouse position
     int mx = cursor.x, my = cursor.y;
 
-    int clipw = fb.w - mx;
-    if(clipw > cursor.size)
-        clipw = cursor.size;
+    int clip_w = fb.w - mx;
+    if(clip_w > cursor.size)
+        clip_w = cursor.size;
 
-    int cliph = fb.h - my;
-    if(cliph > cursor.size)
-        cliph = cursor.size;
+    int clip_h = fb.h - my;
+    if(clip_h > cursor.size)
+        clip_h = cursor.size;
 
-    for(int u=0; u<clipw; u++) {
-        for(int v=0; v<cliph; v++) {
+    for(int u=0; u<clip_w; u++) {
+        for(int v=0; v<clip_h; v++) {
             if(cursor.img[u][v].a == 255)
                 fb.backbuff[(my+v)*fb.w + (mx+u)] = cursor.img[u][v];
         }
@@ -201,7 +214,6 @@ void SDL2GameWindow::setIcon(std::string const& iconPath) {
 }
 
 void SDL2GameWindow::getWindowSize(int& width, int& height) const {
-//    SDL_GetWindowSize(window, &width, &height);
     width = fb.w;
     height = fb.h;
 }
@@ -245,7 +257,7 @@ void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
         currentGameWindow->onMouseRelativePosition(motionevent->xrel, motionevent->yrel);
     }
     else {
-        // provide own abs coords as SDL won't do this for a "hidden window"
+        // provide own AbsolutePosition as SDL won't do this for a "hidden window"
         int tx = cursor.x + motionevent->xrel;
         cursor.x = tx < 0 ? 0 : (tx >= fb.w ? fb.w-1 : tx);
         int ty = cursor.y + motionevent->yrel;
@@ -282,14 +294,7 @@ void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
 }
 
 void SDL2GameWindow::setCursorDisabled(bool disabled) {
-    if (disabled)
-;
-// really don't think this does anything anymore
-//        SDL_SetRelativeMouseMode(SDL_TRUE);
-    else {
-        // TODO test without - these might not do anything if you draw your own pointer as the system reports rel and abs anyway?
-//        SDL_SetRelativeMouseMode(SDL_FALSE);
-
+    if (!disabled) {
         // warp mouse to center for first display
         cursor.x = fb.w / 2;
         cursor.y = fb.h / 2;
@@ -311,7 +316,7 @@ void SDL2GameWindow::swapBuffers() {
         glFinish();
         drawCursor();
     }
-
+    std::swap(fb.frontbuff, fb.backbuff);
     eglSwapBuffers(egl.display, egl.surface);
 }
 
@@ -321,9 +326,9 @@ void SDL2GameWindow::setSwapInterval(int interval) {
 
 // TODO fix QWERTY and numpad mapping.
 KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
-
     if (keyCode >= SDLK_F1 && keyCode <= SDLK_F12)
         return (KeyCode) (keyCode - SDLK_F1 + (int) KeyCode::FN1);
+
     switch (keyCode) {
         case SDLK_BACKSPACE:
             return KeyCode::BACKSPACE;
@@ -398,84 +403,7 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         case SDLK_RALT:
             return KeyCode::RIGHT_ALT;
     }
-/*
-    if (keyCode >= SDL_SCANCODE_F1 && keyCode <= SDL_SCANCODE_F12)
-        return (KeyCode) (keyCode - SDL_SCANCODE_F1 + (int) KeyCode::FN1);
-    switch (keyCode) {
-        case SDL_SCANCODE_BACKSPACE:
-            return KeyCode::BACKSPACE;
-        case SDL_SCANCODE_TAB:
-            return KeyCode::TAB;
-        case SDL_SCANCODE_RETURN:
-            return KeyCode::ENTER;
-        case SDL_SCANCODE_LSHIFT:
-            return KeyCode::LEFT_SHIFT;
-        case SDL_SCANCODE_RSHIFT:
-            return KeyCode::RIGHT_SHIFT;
-        case SDL_SCANCODE_LCTRL:
-            return KeyCode::LEFT_CTRL;
-        case SDL_SCANCODE_RCTRL:
-            return KeyCode::RIGHT_CTRL;
-        case SDL_SCANCODE_PAUSE:
-            return KeyCode::PAUSE;
-        case SDL_SCANCODE_CAPSLOCK:
-            return KeyCode::CAPS_LOCK;
-        case SDL_SCANCODE_ESCAPE:
-            return KeyCode::ESCAPE;
-        case SDL_SCANCODE_PAGEUP:
-            return KeyCode::PAGE_UP;
-        case SDL_SCANCODE_PAGEDOWN:
-            return KeyCode::PAGE_DOWN;
-        case SDL_SCANCODE_END:
-            return KeyCode::END;
-        case SDL_SCANCODE_HOME:
-            return KeyCode::HOME;
-        case SDL_SCANCODE_LEFT:
-            return KeyCode::LEFT;
-        case SDL_SCANCODE_UP:
-            return KeyCode::UP;
-        case SDL_SCANCODE_RIGHT:
-            return KeyCode::RIGHT;
-        case SDL_SCANCODE_DOWN:
-            return KeyCode::DOWN;
-        case SDL_SCANCODE_INSERT:
-            return KeyCode::INSERT;
-        case SDL_SCANCODE_DELETE:
-            return KeyCode::DELETE;
-        case SDL_SCANCODE_NUMLOCKCLEAR:
-            return KeyCode::NUM_LOCK;
-        case SDL_SCANCODE_SCROLLLOCK:
-            return KeyCode::SCROLL_LOCK;
-        case SDL_SCANCODE_SEMICOLON:
-            return KeyCode::SEMICOLON;
-        case SDL_SCANCODE_EQUALS:
-            return KeyCode::EQUAL;
-        case SDL_SCANCODE_COMMA:
-            return KeyCode::COMMA;
-        case SDL_SCANCODE_MINUS:
-            return KeyCode::MINUS;
-        case SDL_SCANCODE_PERIOD:
-            return KeyCode::PERIOD;
-        case SDL_SCANCODE_SLASH:
-            return KeyCode::SLASH;
-        case SDL_SCANCODE_GRAVE:
-            return KeyCode::GRAVE;
-        case SDL_SCANCODE_LEFTBRACKET:
-            return KeyCode::LEFT_BRACKET;
-        case SDL_SCANCODE_BACKSLASH:
-            return KeyCode::BACKSLASH;
-        case SDL_SCANCODE_RIGHTBRACKET:
-            return KeyCode::RIGHT_BRACKET;
-        case SDL_SCANCODE_APOSTROPHE:
-            return KeyCode::APOSTROPHE;
-        case SDL_SCANCODE_APPLICATION:
-            return KeyCode::LEFT_SUPER;
-        case SDL_SCANCODE_LALT:
-            return KeyCode::LEFT_ALT;
-        case SDL_SCANCODE_RALT:
-            return KeyCode::RIGHT_ALT;
-    }
-*/
+
     if (keyCode < 256)
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;

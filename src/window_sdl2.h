@@ -20,11 +20,11 @@ private:
 
     struct framebuffer_state {
         int fd;
-//        char *mmap;
         bgra_pixel *mmap;
         int mmap_size;
         int w;
         int h;
+        bgra_pixel *frontbuff;
         bgra_pixel *backbuff;
     } fb;
 
@@ -50,6 +50,7 @@ private:
 
     void initFrameBuffer();
     void initEGL();
+    void clearColour(float shade);
     void initSDL();
     void initCursor();
     void drawCursor();
