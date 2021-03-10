@@ -15,6 +15,10 @@
 #include <unistd.h>
 #include <algorithm>
 
+GamepadButtonId seq[10] = {GamepadButtonId::DPAD_UP, GamepadButtonId::DPAD_UP, GamepadButtonId::A, GamepadButtonId::DPAD_DOWN, GamepadButtonId::A,
+GamepadButtonId::DPAD_RIGHT, GamepadButtonId::DPAD_LEFT, GamepadButtonId::A, GamepadButtonId::B, GamepadButtonId::START};
+int seqn = 0;
+
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
 
@@ -129,8 +133,8 @@ void SDL2GameWindow::clearColour(float shade) {
 }
 
 void SDL2GameWindow::initSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS) != 0) {
-        SDL_Log("Unable to initialize SDL for input: %s", SDL_GetError());
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_EVENTS|SDL_INIT_GAMECONTROLLER) != 0) {
+        SDL_Log("Unable to initialize SDL for video|events|gamecontroller: %s", SDL_GetError());
 //        return 1; // TODO is this how we handle errors? We cannot return from here
     }
 
@@ -139,6 +143,21 @@ void SDL2GameWindow::initSDL() {
         printf("Could not create SDL window: %s\n", SDL_GetError());
 //        return 1;
     }
+
+    printf("DEBUG: Loaded %d controller mappings...\n", SDL_GameControllerAddMappingsFromFile("/home/osmc/mcpelauncher-manifest/build.sdl2/mcpelauncher-client/gamecontrollerdb.txt"));
+    printf("DEBUG: Events state is %d\n", SDL_GameControllerEventState(SDL_QUERY));
+    if(!SDL_GameControllerEventState(SDL_QUERY))
+        SDL_GameControllerEventState(SDL_ENABLE);
+    printf("DEBUG: %d connected joysticks\n", SDL_NumJoysticks());
+SDL_GameController *controller = NULL;
+        controller = SDL_GameControllerOpen(0);
+if(!controller) {
+    printf("DEBUG: Couldn't open controller! - %s\n", SDL_GetError());
+}
+else
+    printf("DEBUG: Controller opened!\n");
+    printf("DEBUG: Events state is %d\n", SDL_GameControllerEventState(SDL_QUERY));
+//    currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
 }
 
 void SDL2GameWindow::initCursor() {
@@ -231,6 +250,17 @@ void SDL2GameWindow::pollEvents() {
 
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
+            case SDL_CONTROLLERDEVICEADDED:
+            case SDL_CONTROLLERDEVICEREMOVED:
+                handleControllerDeviceEvent(&event.cdevice);
+                break;
+            case SDL_CONTROLLERAXISMOTION:
+                handleControllerAxisEvent(&event.caxis);
+                break;
+            case SDL_CONTROLLERBUTTONDOWN:
+            case SDL_CONTROLLERBUTTONUP:
+                handleControllerButtonEvent(&event.cbutton);
+                break;
             case SDL_MOUSEMOTION:
                 handleMouseMotionEvent(&event.motion);
                 break;
@@ -249,7 +279,98 @@ void SDL2GameWindow::pollEvents() {
                 break;
         }
     }
+}
 
+void SDL2GameWindow::handleControllerDeviceEvent(SDL_ControllerDeviceEvent *cdeviceevent) {
+    currentGameWindow->onGamepadState(cdeviceevent->which, (cdeviceevent->type == SDL_CONTROLLERDEVICEADDED));
+}
+
+void SDL2GameWindow::handleControllerAxisEvent(SDL_ControllerAxisEvent *caxisevent) {
+    GamepadAxisId axis;
+
+    switch (caxisevent->axis) {
+        case SDL_CONTROLLER_AXIS_LEFTX:
+            axis = GamepadAxisId::LEFT_X;
+            break;
+        case SDL_CONTROLLER_AXIS_LEFTY:
+            axis = GamepadAxisId::LEFT_Y;
+            break;
+        case SDL_CONTROLLER_AXIS_RIGHTX:
+            axis = GamepadAxisId::RIGHT_X;
+            break;
+        case SDL_CONTROLLER_AXIS_RIGHTY:
+            axis = GamepadAxisId::RIGHT_Y;
+            break;
+        case SDL_CONTROLLER_AXIS_TRIGGERLEFT:
+            axis = GamepadAxisId::LEFT_TRIGGER;
+            break;
+        case SDL_CONTROLLER_AXIS_TRIGGERRIGHT:
+            axis = GamepadAxisId::RIGHT_TRIGGER;
+            break;
+        default :
+            return;
+    }
+
+    currentGameWindow->onGamepadAxis(caxisevent->which, axis, caxisevent->value);
+}
+
+void SDL2GameWindow::handleControllerButtonEvent(SDL_ControllerButtonEvent *cbuttonevent) {
+    GamepadButtonId btn;
+
+    switch (cbuttonevent->button) {
+        case SDL_CONTROLLER_BUTTON_A:
+            btn = GamepadButtonId::A;
+            break;
+        case SDL_CONTROLLER_BUTTON_B:
+            btn = GamepadButtonId::B;
+            break;
+        case SDL_CONTROLLER_BUTTON_X:
+            btn = GamepadButtonId::X;
+            break;
+        case SDL_CONTROLLER_BUTTON_Y:
+            btn = GamepadButtonId::Y;
+            break;
+        case SDL_CONTROLLER_BUTTON_BACK:
+            btn = GamepadButtonId::BACK;
+            break;
+        case SDL_CONTROLLER_BUTTON_GUIDE:
+            if(cbuttonevent->state == SDL_PRESSED) {
+                currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
+            }
+            btn = GamepadButtonId::GUIDE;
+            break;
+        case SDL_CONTROLLER_BUTTON_START:
+            btn = GamepadButtonId::START;
+            break;
+        case SDL_CONTROLLER_BUTTON_LEFTSTICK:
+            btn = GamepadButtonId::LEFT_STICK;
+            break;
+        case SDL_CONTROLLER_BUTTON_RIGHTSTICK:
+            btn = GamepadButtonId::RIGHT_STICK;
+            break;
+        case SDL_CONTROLLER_BUTTON_LEFTSHOULDER:
+            btn = GamepadButtonId::LB;
+            break;
+        case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER:
+            btn = GamepadButtonId::RB;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_UP:
+            btn = GamepadButtonId::DPAD_UP;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+            btn = GamepadButtonId::DPAD_DOWN;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT:
+            btn = GamepadButtonId::DPAD_LEFT;
+            break;
+        case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+            btn = GamepadButtonId::DPAD_RIGHT;
+            break;
+        default :
+            return;
+    }
+
+    currentGameWindow->onGamepadButton(cbuttonevent->which, btn, (cbuttonevent->state == SDL_PRESSED));
 }
 
 void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
@@ -267,7 +388,19 @@ void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
 }
 
 void SDL2GameWindow::handleMouseClickEvent(SDL_MouseButtonEvent *clickevent) {
-    currentGameWindow->onMouseButton(cursor.x, cursor.y, clickevent->button, (clickevent->state==SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
+  if(clickevent->button == 2 && clickevent->state == SDL_RELEASED) {
+    currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
+    return;
+  }
+
+  if(clickevent->button == 3 && clickevent->state == SDL_RELEASED) {
+    currentGameWindow->onGamepadButton(0, seq[seqn], 1);
+    currentGameWindow->onGamepadButton(0, seq[seqn], 0);
+    seqn = ++seqn % 10;
+    return;
+  }
+
+    currentGameWindow->onMouseButton(cursor.x, cursor.y, clickevent->button, (clickevent->state == SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
 }
 
 void SDL2GameWindow::handleKeyboardEvent(SDL_KeyboardEvent *keyevent) {
@@ -408,3 +541,6 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;
 }
+
+/*
+*/

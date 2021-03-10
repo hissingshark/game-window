@@ -13,7 +13,6 @@ struct bgra_pixel {
     char a;
 };
 
-
 class SDL2GameWindow : public GameWindow {
 
 private:
@@ -54,6 +53,9 @@ private:
     void initSDL();
     void initCursor();
     void drawCursor();
+    void handleControllerDeviceEvent(SDL_ControllerDeviceEvent *cdeviceevent);
+    void handleControllerAxisEvent(SDL_ControllerAxisEvent *caxisevent);
+    void handleControllerButtonEvent(SDL_ControllerButtonEvent *cbuttonevent);
     void handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent);
     void handleMouseClickEvent(SDL_MouseButtonEvent *clickevent);
     void handleKeyboardEvent(SDL_KeyboardEvent *event);

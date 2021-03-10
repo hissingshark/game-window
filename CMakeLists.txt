@@ -34,14 +34,3 @@ elseif (GAMEWINDOW_SYSTEM STREQUAL "SDL2")
     target_sources(gamewindow PRIVATE ${GAMEWINDOW_SOURCES_SDL2})
     target_link_libraries(gamewindow ${EGL_LIBRARIES} ${SDL2_LIBRARIES})
 endif()
-
-#[[ TODO these need to be incorporated so it links sdl2 and egl - how do we append?
-add_library(eglut ${EGLUT_SOURCES})
-target_include_directories(eglut PUBLIC include/)
-target_include_directories(eglut PRIVATE ${EGL_INCLUDE_DIRS})
-target_link_libraries(eglut PUBLIC ${PNG_LIBRARIES} ${EGL_LIBRARIES})
-
-if (EGLUT_USE_FB)
-    target_link_libraries(eglut PUBLIC ${SDL2_LIBRARIES})
-    target_include_directories(eglut PRIVATE ${SDL2_INCLUDE_DIRS})
-]]
