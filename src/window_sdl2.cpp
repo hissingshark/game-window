@@ -15,10 +15,6 @@
 #include <unistd.h>
 #include <algorithm>
 
-GamepadButtonId seq[10] = {GamepadButtonId::DPAD_UP, GamepadButtonId::DPAD_UP, GamepadButtonId::A, GamepadButtonId::DPAD_DOWN, GamepadButtonId::A,
-GamepadButtonId::DPAD_RIGHT, GamepadButtonId::DPAD_LEFT, GamepadButtonId::A, GamepadButtonId::B, GamepadButtonId::START};
-int seqn = 0;
-
 SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, GraphicsApi api) :
         GameWindow(title, width, height, api) {
 
@@ -145,19 +141,15 @@ void SDL2GameWindow::initSDL() {
     }
 
     printf("DEBUG: Loaded %d controller mappings...\n", SDL_GameControllerAddMappingsFromFile("/home/osmc/mcpelauncher-manifest/build.sdl2/mcpelauncher-client/gamecontrollerdb.txt"));
-    printf("DEBUG: Events state is %d\n", SDL_GameControllerEventState(SDL_QUERY));
     if(!SDL_GameControllerEventState(SDL_QUERY))
         SDL_GameControllerEventState(SDL_ENABLE);
     printf("DEBUG: %d connected joysticks\n", SDL_NumJoysticks());
-SDL_GameController *controller = NULL;
-        controller = SDL_GameControllerOpen(0);
-if(!controller) {
-    printf("DEBUG: Couldn't open controller! - %s\n", SDL_GetError());
-}
-else
-    printf("DEBUG: Controller opened!\n");
-    printf("DEBUG: Events state is %d\n", SDL_GameControllerEventState(SDL_QUERY));
-//    currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
+    SDL_GameController *controller = NULL;
+    controller = SDL_GameControllerOpen(0);
+    if(!controller)
+        printf("DEBUG: Couldn't open controller! - %s\n", SDL_GetError());
+    else
+        printf("DEBUG: Controller opened!\n");
 }
 
 void SDL2GameWindow::initCursor() {
@@ -334,9 +326,6 @@ void SDL2GameWindow::handleControllerButtonEvent(SDL_ControllerButtonEvent *cbut
             btn = GamepadButtonId::BACK;
             break;
         case SDL_CONTROLLER_BUTTON_GUIDE:
-            if(cbuttonevent->state == SDL_PRESSED) {
-                currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
-            }
             btn = GamepadButtonId::GUIDE;
             break;
         case SDL_CONTROLLER_BUTTON_START:
@@ -388,18 +377,6 @@ void SDL2GameWindow::handleMouseMotionEvent(SDL_MouseMotionEvent *motionevent) {
 }
 
 void SDL2GameWindow::handleMouseClickEvent(SDL_MouseButtonEvent *clickevent) {
-  if(clickevent->button == 2 && clickevent->state == SDL_RELEASED) {
-    currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
-    return;
-  }
-
-  if(clickevent->button == 3 && clickevent->state == SDL_RELEASED) {
-    currentGameWindow->onGamepadButton(0, seq[seqn], 1);
-    currentGameWindow->onGamepadButton(0, seq[seqn], 0);
-    seqn = ++seqn % 10;
-    return;
-  }
-
     currentGameWindow->onMouseButton(cursor.x, cursor.y, clickevent->button, (clickevent->state == SDL_PRESSED ? MouseButtonAction::PRESS : MouseButtonAction::RELEASE));
 }
 
@@ -541,6 +518,3 @@ KeyCode SDL2GameWindow::getKeyMinecraft(int keyCode) {
         return (KeyCode) keyCode;
     return KeyCode::UNKNOWN;
 }
-
-/*
-*/
