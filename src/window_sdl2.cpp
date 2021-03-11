@@ -27,6 +27,8 @@ SDL2GameWindow::SDL2GameWindow(const std::string& title, int width, int height, 
 }
 
 SDL2GameWindow::~SDL2GameWindow() {
+      printf("DEBUG: Window destructor called!\n");
+
     munmap (fb.mmap, fb.mmap_size);
     ::close(fb.fd);
     delete cursor.img;
@@ -234,6 +236,7 @@ void SDL2GameWindow::show() {
 }
 
 void SDL2GameWindow::close() {
+      printf("DEBUG: Window closed normally!\n");
     // NOOP - borderless window
 }
 
@@ -310,6 +313,12 @@ void SDL2GameWindow::handleControllerButtonEvent(SDL_ControllerButtonEvent *cbut
     GamepadButtonId btn;
 
     switch (cbuttonevent->button) {
+        case SDL_CONTROLLER_BUTTON_GUIDE:
+            if(cbuttonevent->state == SDL_RELEASED) {
+                currentGameWindow->onGamepadState(0, 1); // pad "0" connected = true(1)
+            }
+            break;
+/*
         case SDL_CONTROLLER_BUTTON_A:
             btn = GamepadButtonId::A;
             break;
@@ -325,11 +334,11 @@ void SDL2GameWindow::handleControllerButtonEvent(SDL_ControllerButtonEvent *cbut
         case SDL_CONTROLLER_BUTTON_BACK:
             btn = GamepadButtonId::BACK;
             break;
-        case SDL_CONTROLLER_BUTTON_GUIDE:
-            btn = GamepadButtonId::GUIDE;
-            break;
         case SDL_CONTROLLER_BUTTON_START:
             btn = GamepadButtonId::START;
+            break;
+        case SDL_CONTROLLER_BUTTON_GUIDE:
+            btn = GamepadButtonId::GUIDE;
             break;
         case SDL_CONTROLLER_BUTTON_LEFTSTICK:
             btn = GamepadButtonId::LEFT_STICK;
@@ -355,6 +364,7 @@ void SDL2GameWindow::handleControllerButtonEvent(SDL_ControllerButtonEvent *cbut
         case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
             btn = GamepadButtonId::DPAD_RIGHT;
             break;
+*/
         default :
             return;
     }

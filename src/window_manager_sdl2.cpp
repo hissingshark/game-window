@@ -14,7 +14,6 @@
 
 
 GameWindowManager::ProcAddrFunc dlsymGetProcAddress(const char* sym) {
-//TODO must test SDL_GL_GetProcAddress as a possible replacement
     if (!sym)
         return NULL;
     void *eglFunc;
@@ -59,6 +58,7 @@ std::shared_ptr<GameWindow> SDL2WindowManager::createWindow(const std::string& t
 // we expect to handle inputs via SDL2
 void SDL2WindowManager::addGamepadMappingFile(const std::string &path) {
 //    LinuxGamepadJoystickManager::instance.loadMappingsFromFile(path);
+    printf("DEBUG: Mappings meant to be loaded from - %s", path.c_str());
 }
 
 void SDL2WindowManager::addGamePadMapping(const std::string &content) {
